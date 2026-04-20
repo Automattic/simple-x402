@@ -39,6 +39,18 @@ if ( ! function_exists( 'trailingslashit' ) ) {
 	}
 }
 
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( string $name, $default = false ) {
+		return $GLOBALS['__sx402_options'][ $name ] ?? $default;
+	}
+}
+if ( ! function_exists( 'update_option' ) ) {
+	function update_option( string $name, $value, $autoload = null ): bool {
+		$GLOBALS['__sx402_options'][ $name ] = $value;
+		return true;
+	}
+}
+
 // Reset global state between tests.
 $GLOBALS['__sx402_options']    = array();
 $GLOBALS['__sx402_transients'] = array();
