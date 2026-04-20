@@ -64,13 +64,13 @@ final class PaywallController {
 
 		$signature_header = (string) ( $request['headers']['PAYMENT-SIGNATURE'] ?? '' );
 		if ( '' === $signature_header ) {
-			$this->respond_402( $requirements, array( 'error' => 'payment_required' ) );
+			$this->respond_402( $requirements, $rule['price'], array( 'error' => 'payment_required' ) );
 			return;
 		}
 
 		$payload = X402HeaderCodec::decode( $signature_header );
 		if ( null === $payload ) {
-			$this->respond_402( $requirements, array( 'error' => 'invalid_signature_header' ) );
+			$this->respond_402( $requirements, $rule['price'], array( 'error' => 'invalid_signature_header' ) );
 			return;
 		}
 
@@ -78,6 +78,7 @@ final class PaywallController {
 		if ( ! $verify['isValid'] ) {
 			$this->respond_402(
 				$requirements,
+				$rule['price'],
 				array(
 					'error'  => 'verify_failed',
 					'reason' => $verify['error'],
@@ -90,6 +91,7 @@ final class PaywallController {
 		if ( ! $settle['success'] ) {
 			$this->respond_402(
 				$requirements,
+				$rule['price'],
 				array(
 					'error'  => 'settle_failed',
 					'reason' => $settle['error'],
@@ -114,16 +116,22 @@ final class PaywallController {
 
 	/**
 	 * Emit a 402 JSON response via the response buffer.
+	 *
+	 * @param string $price Decimal USDC amount (e.g. "0.01") for clients that expect a human-readable price alongside `requirements.maxAmountRequired`.
 	 */
-	private function respond_402( array $requirements, array $body ): void {
+	private function respond_402( array $requirements, string $price, array $body ): void {
 		nocache_headers();
 		status_header( 402 );
 		$GLOBALS['__sx402_response']['headers']['Content-Type']     = 'application/json';
 		$GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] = X402HeaderCodec::encode( $requirements );
-		$GLOBALS['__sx402_response']['body']                        = wp_json_encode(
-			array( 'requirements' => $requirements ) + $body
+		// Use array union (+), not array_merge: keys in $body must not overwrite requirements/price.
+		$GLOBALS['__sx402_response']['body']   = wp_json_encode(
+			array(
+				'requirements' => $requirements,
+				'price'        => $price,
+			) + $body
 		);
-		$GLOBALS['__sx402_response']['exited']                      = true;
+		$GLOBALS['__sx402_response']['exited'] = true;
 	}
 
 	/**
