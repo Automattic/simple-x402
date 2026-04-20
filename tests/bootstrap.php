@@ -83,6 +83,26 @@ if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
 		return (string) ( $response['body'] ?? '' );
 	}
 }
+if ( ! function_exists( 'apply_filters' ) ) {
+	function apply_filters( string $hook, $value, ...$args ) {
+		foreach ( $GLOBALS['__sx402_filters'][ $hook ] ?? array() as $cb ) {
+			$value = $cb( $value, ...$args );
+		}
+		return $value;
+	}
+}
+if ( ! function_exists( 'add_filter' ) ) {
+	function add_filter( string $hook, callable $cb, int $priority = 10, int $accepted_args = 1 ): bool {
+		$GLOBALS['__sx402_filters'][ $hook ][] = $cb;
+		return true;
+	}
+}
+if ( ! function_exists( 'has_term' ) ) {
+	function has_term( string $term, string $taxonomy, int $post_id ): bool {
+		return in_array( array( $term, $taxonomy, $post_id ), $GLOBALS['__sx402_terms'] ?? array(), true );
+	}
+}
+$GLOBALS['__sx402_terms'] = array();
 
 // Reset global state between tests.
 $GLOBALS['__sx402_options']    = array();
