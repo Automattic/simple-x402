@@ -12,30 +12,28 @@ namespace SimpleX402\Services;
 use Jaybizzle\CrawlerDetect\CrawlerDetect;
 
 /**
- * Detects common crawlers/bots from the User-Agent (or an injected string for tests).
+ * Detects common crawlers/bots from a User-Agent string.
+ *
+ * The caller supplies the header value (e.g. WordPress code reads
+ * `$_SERVER['HTTP_USER_AGENT']` and passes it in). This class has no
+ * dependency on WordPress or superglobals.
  */
 final class BotDetector {
 
 	private ?CrawlerDetect $engine = null;
 
-	public function __construct( private readonly ?string $user_agent = null ) {}
+	public function __construct( private readonly string $user_agent ) {}
 
 	/**
-	 * Whether the current (or injected) User-Agent looks like a bot.
+	 * Whether the injected User-Agent looks like a bot.
 	 */
 	public function is_bot(): bool {
-		$ua = $this->user_agent;
-		if ( null === $ua ) {
-			$ua = isset( $_SERVER['HTTP_USER_AGENT'] )
-				? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] )
-				: '';
-		}
-		if ( '' === $ua ) {
+		if ( '' === $this->user_agent ) {
 			return false;
 		}
 		if ( null === $this->engine ) {
 			$this->engine = new CrawlerDetect();
 		}
-		return $this->engine->isCrawler( $ua );
+		return $this->engine->isCrawler( $this->user_agent );
 	}
 }

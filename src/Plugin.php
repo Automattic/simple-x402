@@ -41,7 +41,7 @@ final class Plugin {
 			new GrantStore(),
 			$settings
 		);
-		$bots         = new BotDetector();
+		$bots         = new BotDetector( self::current_user_agent() );
 		$bot_singular = new BotSingularPaywallRule( $settings, $bots );
 		$default_rule = new DefaultPaywallRule( $settings );
 
@@ -94,6 +94,15 @@ final class Plugin {
 				wp_insert_term( DefaultPaywallRule::TERM, $taxonomy );
 			}
 		}
+	}
+
+	/**
+	 * HTTP User-Agent for this request, unslashed (WordPress convention).
+	 */
+	private static function current_user_agent(): string {
+		return isset( $_SERVER['HTTP_USER_AGENT'] )
+			? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] )
+			: '';
 	}
 
 	/**
