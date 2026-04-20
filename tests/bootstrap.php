@@ -50,6 +50,39 @@ if ( ! function_exists( 'update_option' ) ) {
 		return true;
 	}
 }
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+		public function __construct( public string $code = '', public string $message = '' ) {}
+	}
+}
+if ( ! function_exists( 'is_wp_error' ) ) {
+	function is_wp_error( $thing ): bool {
+		return $thing instanceof \WP_Error;
+	}
+}
+if ( ! function_exists( 'wp_remote_post' ) ) {
+	function wp_remote_post( string $url, array $args = array() ) {
+		$GLOBALS['__sx402_http'] = array( 'url' => $url, 'args' => $args );
+		if ( ! empty( $GLOBALS['__sx402_http_queue'] ) ) {
+			return array_shift( $GLOBALS['__sx402_http_queue'] );
+		}
+		$next = $GLOBALS['__sx402_http_next'] ?? null;
+		if ( $next instanceof \WP_Error ) {
+			return $next;
+		}
+		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+	}
+}
+if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+	function wp_remote_retrieve_response_code( $response ): int {
+		return (int) ( $response['response']['code'] ?? 0 );
+	}
+}
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+	function wp_remote_retrieve_body( $response ): string {
+		return (string) ( $response['body'] ?? '' );
+	}
+}
 
 // Reset global state between tests.
 $GLOBALS['__sx402_options']    = array();
