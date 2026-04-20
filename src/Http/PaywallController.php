@@ -35,14 +35,15 @@ final class PaywallController {
 	) {}
 
 	/**
-	 * @param array{path:string,method:string,post_id:int,headers:array<string,string>} $request Request details.
+	 * @param array{path:string,method:string,post_id:int,singular?:bool,headers:array<string,string>} $request Request details.
 	 */
 	public function handle( array $request ): void {
 		$rule = $this->rules->resolve(
 			array(
-				'path'    => $request['path'],
-				'method'  => $request['method'],
-				'post_id' => $request['post_id'],
+				'path'     => $request['path'],
+				'method'   => $request['method'],
+				'post_id'  => $request['post_id'],
+				'singular' => ! empty( $request['singular'] ),
 			)
 		);
 		if ( null === $rule ) {

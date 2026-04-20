@@ -23,6 +23,15 @@ if ( ! function_exists( 'sanitize_text_field' ) ) {
 		return trim( strip_tags( $text ) );
 	}
 }
+if ( ! function_exists( 'wp_unslash' ) ) {
+	/**
+	 * @param string|array $value Value to unslash.
+	 * @return string|array
+	 */
+	function wp_unslash( $value ) {
+		return is_array( $value ) ? array_map( 'wp_unslash', $value ) : stripslashes( (string) $value );
+	}
+}
 if ( ! function_exists( 'wp_json_encode' ) ) {
 	function wp_json_encode( $data, int $options = 0 ): string|false {
 		return json_encode( $data, $options );

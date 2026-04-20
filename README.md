@@ -24,7 +24,8 @@ composer lint
 
 - Adds a `paywall` tag and category on activation.
 - Adds a Settings → Simple x402 page with two fields: wallet address, default price.
-- On any frontend request for a paywalled post, responds HTTP 402 with a `PAYMENT-REQUIRED` header and a JSON body, unless the request carries a valid `PAYMENT-SIGNATURE` (verified + settled via x402.org) or a live grant.
+- On singular views (single post, page, CPT, etc.), requires x402 for detected bots/crawlers (via `jaybizzle/crawler-detect`); humans still need the `paywall` tag or category on the content.
+- On any frontend request that matches a rule, responds HTTP 402 with a `PAYMENT-REQUIRED` header and a JSON body, unless the request carries a valid `PAYMENT-SIGNATURE` (verified + settled via x402.org) or a live grant.
 
 ## Extending
 
