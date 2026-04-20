@@ -137,6 +137,11 @@ if ( ! function_exists( 'status_header' ) ) {
 if ( ! function_exists( 'nocache_headers' ) ) {
 	function nocache_headers(): void {}
 }
+if ( ! function_exists( 'register_setting' ) ) {
+	function register_setting( string $group, string $option, array $args = array() ): void {
+		$GLOBALS['__sx402_registered_settings'][ $group ][ $option ] = $args;
+	}
+}
 $GLOBALS['__sx402_terms']    = array();
 $GLOBALS['__sx402_response'] = array(
 	'status'  => 200,

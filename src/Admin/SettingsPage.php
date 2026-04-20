@@ -53,13 +53,11 @@ final class SettingsPage {
 			self::GROUP,
 			SettingsRepository::OPTION_NAME,
 			array(
-				'sanitize_callback' => function ( $input ): array {
-					$this->settings->save( is_array( $input ) ? $input : array() );
-					return array(
-						'wallet_address' => $this->settings->wallet_address(),
-						'default_price'  => $this->settings->default_price(),
-					);
-				},
+				// Must be pure: WP calls this from inside update_option, so
+				// persisting here (e.g. via SettingsRepository::save) recurses.
+				'sanitize_callback' => fn ( $input ): array => $this->settings->sanitize(
+					is_array( $input ) ? $input : array()
+				),
 			)
 		);
 	}

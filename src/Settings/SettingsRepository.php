@@ -43,22 +43,31 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Persist settings from user input.
+	 * Sanitise raw input into the canonical storage shape. Pure function —
+	 * safe to call from a `register_setting` sanitize_callback (which must
+	 * not itself invoke `update_option`, on pain of infinite recursion).
 	 *
-	 * @param array $input Raw input, typically from the settings form.
+	 * @param array $input Raw input.
 	 */
-	public function save( array $input ): void {
+	public function sanitize( array $input ): array {
 		$wallet = isset( $input['wallet_address'] ) ? trim( (string) $input['wallet_address'] ) : '';
 		$price  = isset( $input['default_price'] ) ? trim( (string) $input['default_price'] ) : '';
 		if ( ! is_numeric( $price ) || (float) $price <= 0 ) {
 			$price = self::DEFAULT_PRICE;
 		}
-		update_option(
-			self::OPTION_NAME,
-			array(
-				'wallet_address' => $wallet,
-				'default_price'  => $price,
-			)
+		return array(
+			'wallet_address' => $wallet,
+			'default_price'  => $price,
 		);
+	}
+
+	/**
+	 * Persist settings from raw input. For programmatic use; the Settings API
+	 * must use `sanitize()` instead (it handles persistence itself).
+	 *
+	 * @param array $input Raw input.
+	 */
+	public function save( array $input ): void {
+		update_option( self::OPTION_NAME, $this->sanitize( $input ) );
 	}
 }
