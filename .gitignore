@@ -51,3 +51,4 @@ wp-config.php
 /vendor/
 /.phpunit.cache/
 .DS_Store
+/scripts/x402-paid-fetch/node_modules

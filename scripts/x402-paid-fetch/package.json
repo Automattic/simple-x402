@@ -1,0 +1,16 @@
+{
+  "name": "simple-x402-paid-fetch-smoke",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal x402 buyer (official @x402/fetch) for manual smoke tests against Simple x402 or any 402 resource.",
+  "scripts": {
+    "paid-fetch": "node paid-fetch.mjs"
+  },
+  "dependencies": {
+    "@x402/core": "^2.10.0",
+    "@x402/evm": "^2.10.0",
+    "@x402/fetch": "^2.10.0",
+    "viem": "^2.39.0"
+  }
+}

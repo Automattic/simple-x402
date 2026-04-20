@@ -20,6 +20,14 @@ composer test
 composer lint
 ```
 
+## Manual smoke test (real site, no PHPUnit)
+
+See [docs/manual-x402-smoke-test.md](docs/manual-x402-smoke-test.md): **Base Sepolia** walkthrough using official **`@x402/fetch`** / **`@x402/evm`** ([buyer quickstart](https://docs.x402.org/getting-started/quickstart-for-buyers)).
+
+- **Inspect 402 only:** `node scripts/inspect-402.mjs '<url>'` (Node 18+, no deps).
+- **Pay then read body:** `cd scripts/x402-paid-fetch && npm install && EVM_PRIVATE_KEY=0x… node paid-fetch.mjs '<url>'`.
+- **Check grant:** `node scripts/verify-grant.mjs '<url>' '<0xPayerWallet>'`.
+
 ## What it does
 
 - Adds a `paywall` tag and category on activation.
