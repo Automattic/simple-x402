@@ -29,3 +29,9 @@ composer lint
 ## Extending
 
 See the `simple_x402_rule_for_request` filter in `src/Services/RuleResolver.php`.
+
+## Changelog
+
+### 0.1.0
+
+- Initial MVP: paywall posts tagged or categorised `paywall`, pay with x402 on Base Sepolia via x402.org.
