@@ -50,5 +50,4 @@ wp-config.php
 # Plugin development
 /vendor/
 /.phpunit.cache/
-/composer.lock
 .DS_Store
