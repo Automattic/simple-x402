@@ -69,9 +69,11 @@ final class SettingsPage {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$wallet = $this->settings->wallet_address();
-		$price  = $this->settings->default_price();
-		$option = SettingsRepository::OPTION_NAME;
+		$wallet   = $this->settings->wallet_address();
+		$price    = $this->settings->default_price();
+		$mode     = $this->settings->paywall_mode();
+		$category = $this->settings->paywall_category();
+		$option   = SettingsRepository::OPTION_NAME;
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
@@ -111,6 +113,52 @@ final class SettingsPage {
 								class="small-text"
 								value="<?php echo esc_attr( $price ); ?>"
 							/>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<?php esc_html_e( 'Paywall mode', 'simple-x402' ); ?>
+						</th>
+						<td>
+							<fieldset>
+								<label>
+									<input
+										type="radio"
+										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
+										value="<?php echo esc_attr( SettingsRepository::MODE_CATEGORY ); ?>"
+										<?php checked( $mode, SettingsRepository::MODE_CATEGORY ); ?>
+									/>
+									<?php esc_html_e( 'Only posts in the configured category', 'simple-x402' ); ?>
+								</label><br />
+								<label>
+									<input
+										type="radio"
+										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
+										value="<?php echo esc_attr( SettingsRepository::MODE_ALL_POSTS ); ?>"
+										<?php checked( $mode, SettingsRepository::MODE_ALL_POSTS ); ?>
+									/>
+									<?php esc_html_e( 'All published posts', 'simple-x402' ); ?>
+								</label>
+							</fieldset>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="sx402-category">
+								<?php esc_html_e( 'Paywall category', 'simple-x402' ); ?>
+							</label>
+						</th>
+						<td>
+							<input
+								name="<?php echo esc_attr( $option ); ?>[paywall_category]"
+								id="sx402-category"
+								type="text"
+								class="regular-text"
+								value="<?php echo esc_attr( $category ); ?>"
+							/>
+							<p class="description">
+								<?php esc_html_e( 'Category whose posts are paywalled in "category" mode. Renaming here does not update existing posts.', 'simple-x402' ); ?>
+							</p>
 						</td>
 					</tr>
 				</table>

@@ -30,8 +30,10 @@ final class SettingsPageTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'wallet_address' => '0xABC',
-				'default_price'  => '0.5',
+				'wallet_address'   => '0xABC',
+				'default_price'    => '0.5',
+				'paywall_mode'     => 'category',
+				'paywall_category' => 'paywall',
 			),
 			$result
 		);
@@ -54,5 +56,49 @@ final class SettingsPageTest extends TestCase {
 		);
 
 		$this->assertSame( '0.01', $result['default_price'] );
+	}
+
+	public function test_render_shows_both_mode_options_with_stored_selected(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'wallet_address'   => '0xabc',
+			'default_price'    => '0.01',
+			'paywall_mode'     => 'all-posts',
+			'paywall_category' => 'paywall',
+		);
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'value="category"', $html );
+		$this->assertStringContainsString( 'value="all-posts"', $html );
+		$this->assertMatchesRegularExpression(
+			'/value="all-posts"[^>]*checked/',
+			$html
+		);
+		$this->assertDoesNotMatchRegularExpression(
+			'/value="category"[^>]*checked/',
+			$html
+		);
+	}
+
+	public function test_render_shows_paywall_category_input_with_stored_value(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'wallet_address'   => '0xabc',
+			'default_price'    => '0.01',
+			'paywall_mode'     => 'category',
+			'paywall_category' => 'Premium',
+		);
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/name="[^"]*\[paywall_category\]"[^>]*value="Premium"/',
+			$html
+		);
 	}
 }

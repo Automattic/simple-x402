@@ -22,10 +22,15 @@ composer lint
 
 ## What it does
 
-- Adds a `paywall` tag and category on activation.
-- Adds a Settings → Simple x402 page with two fields: wallet address, default price.
-- On singular views (single post, page, CPT, etc.), requires x402 for detected bots/crawlers (via `jaybizzle/crawler-detect`); humans still need the `paywall` tag or category on the content.
+- Adds a `paywall` category on activation.
+- Adds a Settings → Simple x402 page with: wallet address, default price, paywall mode, paywall category name.
+- Two selection modes for humans:
+  - **Category** (default): gate only posts assigned to the configured category.
+  - **All posts**: gate every published post of type `post`.
+- On singular views (single post, page, CPT, etc.), also requires x402 for detected bots/crawlers (via `jaybizzle/crawler-detect`), regardless of the category/mode setting.
 - On any frontend request that matches a rule, responds HTTP 402 with a `PAYMENT-REQUIRED` header and a JSON body, unless the request carries a valid `PAYMENT-SIGNATURE` (verified + settled via x402.org) or a live grant.
+
+Renaming the category in settings does not relabel existing posts — reassign them yourself if you rename.
 
 ## Extending
 
@@ -40,4 +45,4 @@ See the `simple_x402_rule_for_request` filter in `src/Services/RuleResolver.php`
 
 ### 0.1.0
 
-- Initial MVP: paywall posts tagged or categorised `paywall`, pay with x402 on Base Sepolia via x402.org.
+- Initial MVP: paywall posts by category (configurable) or gate all posts for humans; gate singular views for detected bots/crawlers; pay with x402 on Base Sepolia via x402.org.

@@ -13,10 +13,12 @@ use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\BotDetector;
 use SimpleX402\Services\BotSingularPaywallRule;
+use SimpleX402\Services\CategoryProvisioner;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\RuleResolver;
+use SimpleX402\Services\SettingsChangeNotifier;
 use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Settings\SettingsRepository;
 
@@ -44,9 +46,24 @@ final class Plugin {
 		$bots         = new BotDetector( self::current_user_agent() );
 		$bot_singular = new BotSingularPaywallRule( $settings, $bots );
 		$default_rule = new DefaultPaywallRule( $settings );
+		$provisioner  = new CategoryProvisioner();
+		$notifier     = new SettingsChangeNotifier();
 
 		add_filter( RuleResolver::HOOK, $bot_singular, 5, 2 );
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
+
+		add_action(
+			'update_option_' . SettingsRepository::OPTION_NAME,
+			static function ( $old_value, $new_value ) use ( $provisioner, $notifier ): void {
+				if ( ! is_array( $new_value ) ) {
+					return;
+				}
+				$provisioner->ensure( (string) ( $new_value['paywall_category'] ?? '' ) );
+				$notifier->notify( is_array( $old_value ) ? $old_value : array(), $new_value );
+			},
+			10,
+			2
+		);
 
 		if ( is_admin() ) {
 			( new SettingsPage( $settings ) )->register();
@@ -86,14 +103,10 @@ final class Plugin {
 	}
 
 	/**
-	 * Activation hook: ensure the `paywall` tag and category exist.
+	 * Activation hook: ensure the default paywall category exists.
 	 */
 	public static function activate(): void {
-		foreach ( array( 'post_tag', 'category' ) as $taxonomy ) {
-			if ( ! term_exists( DefaultPaywallRule::TERM, $taxonomy ) ) {
-				wp_insert_term( DefaultPaywallRule::TERM, $taxonomy );
-			}
-		}
+		( new CategoryProvisioner() )->ensure( SettingsRepository::DEFAULT_CATEGORY );
 	}
 
 	/**

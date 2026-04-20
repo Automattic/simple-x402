@@ -19,8 +19,14 @@ namespace SimpleX402\Settings;
  */
 final class SettingsRepository {
 
-	public const OPTION_NAME   = 'simple_x402_settings';
-	public const DEFAULT_PRICE = '0.01';
+	public const OPTION_NAME      = 'simple_x402_settings';
+	public const DEFAULT_PRICE    = '0.01';
+	public const DEFAULT_CATEGORY = 'paywall';
+
+	public const MODE_CATEGORY  = 'category';
+	public const MODE_ALL_POSTS = 'all-posts';
+	public const VALID_MODES    = array( self::MODE_CATEGORY, self::MODE_ALL_POSTS );
+	public const DEFAULT_MODE   = self::MODE_CATEGORY;
 
 	/**
 	 * Configured receiving wallet address, or '' if not set.
@@ -43,6 +49,24 @@ final class SettingsRepository {
 	}
 
 	/**
+	 * Configured paywall selection mode, falling back to DEFAULT_MODE if unset or invalid.
+	 */
+	public function paywall_mode(): string {
+		$stored = get_option( self::OPTION_NAME, array() );
+		$mode   = is_array( $stored ) ? (string) ( $stored['paywall_mode'] ?? '' ) : '';
+		return in_array( $mode, self::VALID_MODES, true ) ? $mode : self::DEFAULT_MODE;
+	}
+
+	/**
+	 * Configured category term used by `category` mode, falling back to DEFAULT_CATEGORY.
+	 */
+	public function paywall_category(): string {
+		$stored = get_option( self::OPTION_NAME, array() );
+		$term   = is_array( $stored ) ? trim( (string) ( $stored['paywall_category'] ?? '' ) ) : '';
+		return '' === $term ? self::DEFAULT_CATEGORY : $term;
+	}
+
+	/**
 	 * Sanitise raw input into the canonical storage shape. Pure function —
 	 * safe to call from a `register_setting` sanitize_callback (which must
 	 * not itself invoke `update_option`, on pain of infinite recursion).
@@ -55,9 +79,19 @@ final class SettingsRepository {
 		if ( ! is_numeric( $price ) || (float) $price <= 0 ) {
 			$price = self::DEFAULT_PRICE;
 		}
+		$mode = isset( $input['paywall_mode'] ) ? (string) $input['paywall_mode'] : '';
+		if ( ! in_array( $mode, self::VALID_MODES, true ) ) {
+			$mode = self::DEFAULT_MODE;
+		}
+		$category = isset( $input['paywall_category'] ) ? trim( (string) $input['paywall_category'] ) : '';
+		if ( '' === $category ) {
+			$category = self::DEFAULT_CATEGORY;
+		}
 		return array(
-			'wallet_address' => $wallet,
-			'default_price'  => $price,
+			'wallet_address'   => $wallet,
+			'default_price'    => $price,
+			'paywall_mode'     => $mode,
+			'paywall_category' => $category,
 		);
 	}
 

@@ -111,6 +111,30 @@ if ( ! function_exists( 'has_term' ) ) {
 		return in_array( array( $term, $taxonomy, $post_id ), $GLOBALS['__sx402_terms'] ?? array(), true );
 	}
 }
+if ( ! function_exists( 'term_exists' ) ) {
+	function term_exists( string $term, string $taxonomy ) {
+		return in_array( array( $term, $taxonomy ), $GLOBALS['__sx402_existing_terms'] ?? array(), true )
+			? array( 'term_id' => 1 )
+			: null;
+	}
+}
+if ( ! function_exists( 'wp_insert_term' ) ) {
+	function wp_insert_term( string $term, string $taxonomy ) {
+		$GLOBALS['__sx402_existing_terms'][] = array( $term, $taxonomy );
+		$GLOBALS['__sx402_inserted_terms'][] = array( $term, $taxonomy );
+		return array( 'term_id' => count( $GLOBALS['__sx402_existing_terms'] ) );
+	}
+}
+if ( ! function_exists( 'get_post_type' ) ) {
+	function get_post_type( int $post_id ): string|false {
+		return $GLOBALS['__sx402_posts'][ $post_id ]['post_type'] ?? false;
+	}
+}
+if ( ! function_exists( 'get_post_status' ) ) {
+	function get_post_status( int $post_id ): string|false {
+		return $GLOBALS['__sx402_posts'][ $post_id ]['post_status'] ?? false;
+	}
+}
 if ( ! function_exists( 'get_transient' ) ) {
 	function get_transient( string $key ) {
 		$entry = $GLOBALS['__sx402_transients'][ $key ] ?? null;
@@ -151,7 +175,51 @@ if ( ! function_exists( 'register_setting' ) ) {
 		$GLOBALS['__sx402_registered_settings'][ $group ][ $option ] = $args;
 	}
 }
-$GLOBALS['__sx402_terms']    = array();
+if ( ! function_exists( 'current_user_can' ) ) {
+	function current_user_can( string $cap ): bool {
+		return true;
+	}
+}
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( string $text, string $domain = 'default' ): void {
+		echo htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+if ( ! function_exists( 'settings_fields' ) ) {
+	function settings_fields( string $group ): void {}
+}
+if ( ! function_exists( 'submit_button' ) ) {
+	function submit_button(): void {}
+}
+if ( ! function_exists( 'add_settings_error' ) ) {
+	function add_settings_error( string $setting, string $code, string $message, string $type = 'error' ): void {
+		$GLOBALS['__sx402_settings_errors'][] = array(
+			'setting' => $setting,
+			'code'    => $code,
+			'message' => $message,
+			'type'    => $type,
+		);
+	}
+}
+if ( ! function_exists( 'settings_errors' ) ) {
+	function settings_errors( string $setting = '' ): void {
+		$GLOBALS['__sx402_settings_errors_rendered'] = true;
+	}
+}
+if ( ! function_exists( 'checked' ) ) {
+	function checked( $checked, $current = true, bool $echo = true ): string {
+		$out = (string) $checked === (string) $current ? ' checked="checked"' : '';
+		if ( $echo ) {
+			echo $out;
+		}
+		return $out;
+	}
+}
+$GLOBALS['__sx402_terms']           = array();
+$GLOBALS['__sx402_posts']           = array();
+$GLOBALS['__sx402_existing_terms']  = array();
+$GLOBALS['__sx402_inserted_terms']  = array();
+$GLOBALS['__sx402_settings_errors'] = array();
 $GLOBALS['__sx402_response'] = array(
 	'status'  => 200,
 	'headers' => array(),
