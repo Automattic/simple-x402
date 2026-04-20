@@ -102,6 +102,28 @@ if ( ! function_exists( 'has_term' ) ) {
 		return in_array( array( $term, $taxonomy, $post_id ), $GLOBALS['__sx402_terms'] ?? array(), true );
 	}
 }
+if ( ! function_exists( 'get_transient' ) ) {
+	function get_transient( string $key ) {
+		$entry = $GLOBALS['__sx402_transients'][ $key ] ?? null;
+		if ( null === $entry ) {
+			return false;
+		}
+		if ( $entry['expires'] > 0 && $entry['expires'] < time() ) {
+			unset( $GLOBALS['__sx402_transients'][ $key ] );
+			return false;
+		}
+		return $entry['value'];
+	}
+}
+if ( ! function_exists( 'set_transient' ) ) {
+	function set_transient( string $key, $value, int $ttl = 0 ): bool {
+		$GLOBALS['__sx402_transients'][ $key ] = array(
+			'value'   => $value,
+			'expires' => $ttl > 0 ? time() + $ttl : 0,
+		);
+		return true;
+	}
+}
 $GLOBALS['__sx402_terms'] = array();
 
 // Reset global state between tests.
