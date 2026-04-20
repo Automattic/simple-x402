@@ -67,9 +67,16 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Sanitise raw input into the canonical storage shape. Pure function —
-	 * safe to call from a `register_setting` sanitize_callback (which must
-	 * not itself invoke `update_option`, on pain of infinite recursion).
+	 * Sanitise raw input into the canonical storage shape. Safe to call from a
+	 * `register_setting` sanitize_callback: it reads stored state but must not
+	 * write (calling `update_option` here recurses).
+	 *
+	 * For `paywall_category` we distinguish *absent* from *present+empty*:
+	 *  - absent (key missing, e.g. the UI disabled the input) → preserve stored
+	 *  - present+empty (admin cleared the field)              → apply default
+	 *
+	 * Conflating these caused the "switch to All posts silently resets your
+	 * category" bug, because a disabled input is omitted from POST entirely.
 	 *
 	 * @param array $input Raw input.
 	 */
@@ -83,9 +90,13 @@ final class SettingsRepository {
 		if ( ! in_array( $mode, self::VALID_MODES, true ) ) {
 			$mode = self::DEFAULT_MODE;
 		}
-		$category = isset( $input['paywall_category'] ) ? trim( (string) $input['paywall_category'] ) : '';
-		if ( '' === $category ) {
-			$category = self::DEFAULT_CATEGORY;
+		if ( array_key_exists( 'paywall_category', $input ) ) {
+			$category = trim( (string) $input['paywall_category'] );
+			if ( '' === $category ) {
+				$category = self::DEFAULT_CATEGORY;
+			}
+		} else {
+			$category = $this->paywall_category();
 		}
 		return array(
 			'wallet_address'   => $wallet,

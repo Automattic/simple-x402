@@ -88,4 +88,52 @@ final class SettingsRepositoryTest extends TestCase {
 		);
 		$this->assertSame( 'paywall', $repo->paywall_category() );
 	}
+
+	public function test_sanitize_preserves_stored_category_when_key_absent(): void {
+		// Absent-key = "preserve stored". Present-but-empty = "apply default".
+		// Keeping these paths distinct lets the UI disable the input without
+		// silently resetting the stored category on every save.
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_mode'     => 'category',
+				'paywall_category' => 'Premium',
+			)
+		);
+		$this->assertSame( 'Premium', $repo->paywall_category() );
+
+		// Second save omits paywall_category (disabled input doesn't post).
+		$repo->save(
+			array(
+				'wallet_address' => '0xabc',
+				'default_price'  => '0.01',
+				'paywall_mode'   => 'all-posts',
+			)
+		);
+		$this->assertSame( 'Premium', $repo->paywall_category() );
+	}
+
+	public function test_sanitize_applies_default_when_key_present_but_empty(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_mode'     => 'category',
+				'paywall_category' => 'Premium',
+			)
+		);
+
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_mode'     => 'category',
+				'paywall_category' => '',
+			)
+		);
+		$this->assertSame( 'paywall', $repo->paywall_category() );
+	}
 }

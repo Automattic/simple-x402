@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+if ( ! defined( 'SIMPLE_X402_FILE' ) ) {
+	define( 'SIMPLE_X402_FILE', __DIR__ . '/../simple-x402.php' );
+}
+if ( ! defined( 'SIMPLE_X402_VERSION' ) ) {
+	define( 'SIMPLE_X402_VERSION', '0.0.0-test' );
+}
+
 if ( ! function_exists( '__' ) ) {
 	function __( string $text, string $domain = 'default' ): string {
 		return $text;
@@ -113,16 +120,38 @@ if ( ! function_exists( 'has_term' ) ) {
 }
 if ( ! function_exists( 'term_exists' ) ) {
 	function term_exists( string $term, string $taxonomy ) {
-		return in_array( array( $term, $taxonomy ), $GLOBALS['__sx402_existing_terms'] ?? array(), true )
-			? array( 'term_id' => 1 )
-			: null;
+		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
+			if ( $row['name'] === $term && $row['taxonomy'] === $taxonomy ) {
+				return array( 'term_id' => $row['term_id'] );
+			}
+		}
+		return null;
 	}
 }
 if ( ! function_exists( 'wp_insert_term' ) ) {
 	function wp_insert_term( string $term, string $taxonomy ) {
-		$GLOBALS['__sx402_existing_terms'][] = array( $term, $taxonomy );
-		$GLOBALS['__sx402_inserted_terms'][] = array( $term, $taxonomy );
-		return array( 'term_id' => count( $GLOBALS['__sx402_existing_terms'] ) );
+		$term_id = count( $GLOBALS['__sx402_existing_terms'] ?? array() ) + 1;
+		$row     = array(
+			'term_id'  => $term_id,
+			'name'     => $term,
+			'taxonomy' => $taxonomy,
+		);
+		$GLOBALS['__sx402_existing_terms'][] = $row;
+		$GLOBALS['__sx402_inserted_terms'][] = $row;
+		return array( 'term_id' => $term_id );
+	}
+}
+if ( ! function_exists( 'wp_update_term' ) ) {
+	function wp_update_term( int $term_id, string $taxonomy, array $args = array() ) {
+		foreach ( $GLOBALS['__sx402_existing_terms'] as $idx => $row ) {
+			if ( $row['term_id'] === $term_id && $row['taxonomy'] === $taxonomy ) {
+				if ( isset( $args['name'] ) ) {
+					$GLOBALS['__sx402_existing_terms'][ $idx ]['name'] = (string) $args['name'];
+				}
+				return array( 'term_id' => $term_id );
+			}
+		}
+		return new \WP_Error( 'invalid_term', 'Term not found.' );
 	}
 }
 if ( ! function_exists( 'get_post_type' ) ) {
@@ -185,6 +214,20 @@ if ( ! function_exists( 'esc_html_e' ) ) {
 		echo htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
 	}
 }
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( string $text, string $domain = 'default' ): void {
+		echo htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+if ( ! function_exists( 'esc_js' ) ) {
+	function esc_js( string $text ): string {
+		return str_replace(
+			array( '\\', "'", '"', "\n", "\r" ),
+			array( '\\\\', "\\'", '\\"', '\\n', '\\r' ),
+			$text
+		);
+	}
+}
 if ( ! function_exists( 'settings_fields' ) ) {
 	function settings_fields( string $group ): void {}
 }
@@ -215,11 +258,44 @@ if ( ! function_exists( 'checked' ) ) {
 		return $out;
 	}
 }
+if ( ! function_exists( 'disabled' ) ) {
+	function disabled( $disabled, $current = true, bool $echo = true ): string {
+		$out = (string) $disabled === (string) $current ? ' disabled="disabled"' : '';
+		if ( $echo ) {
+			echo $out;
+		}
+		return $out;
+	}
+}
+if ( ! function_exists( 'plugins_url' ) ) {
+	function plugins_url( string $path = '', string $plugin = '' ): string {
+		return 'https://example.test/wp-content/plugins/simple-x402/' . ltrim( $path, '/' );
+	}
+}
+if ( ! function_exists( 'wp_enqueue_script' ) ) {
+	function wp_enqueue_script( string $handle, string $src = '', array $deps = array(), $ver = false, $in_footer = false ): bool {
+		$GLOBALS['__sx402_enqueued_scripts'][ $handle ] = array(
+			'src'       => $src,
+			'deps'      => $deps,
+			'ver'       => $ver,
+			'in_footer' => $in_footer,
+		);
+		return true;
+	}
+}
+if ( ! function_exists( 'wp_localize_script' ) ) {
+	function wp_localize_script( string $handle, string $object_name, array $data ): bool {
+		$GLOBALS['__sx402_localized_data'][ $handle ][ $object_name ] = $data;
+		return true;
+	}
+}
 $GLOBALS['__sx402_terms']           = array();
 $GLOBALS['__sx402_posts']           = array();
 $GLOBALS['__sx402_existing_terms']  = array();
 $GLOBALS['__sx402_inserted_terms']  = array();
 $GLOBALS['__sx402_settings_errors'] = array();
+$GLOBALS['__sx402_enqueued_scripts'] = array();
+$GLOBALS['__sx402_localized_data']   = array();
 $GLOBALS['__sx402_response'] = array(
 	'status'  => 200,
 	'headers' => array(),
