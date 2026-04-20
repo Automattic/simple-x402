@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<ruleset name="simple-x402">
+    <description>Coding standards for the Simple x402 plugin.</description>
+    <file>simple-x402.php</file>
+    <file>src</file>
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+    <rule ref="WordPress-Extra"/>
+    <rule ref="PHPCompatibilityWP"/>
+    <config name="testVersion" value="8.1-"/>
+    <config name="minimum_supported_wp_version" value="6.4"/>
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array" value="simple-x402"/>
+        </properties>
+    </rule>
+</ruleset>
