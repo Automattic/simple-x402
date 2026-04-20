@@ -57,6 +57,31 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 
+	public function test_passes_singular_flag_to_rule_filter(): void {
+		$seen = null;
+		add_filter(
+			'simple_x402_rule_for_request',
+			static function ( $rule, $ctx ) use ( &$seen ) {
+				$seen = $ctx;
+				return null;
+			},
+			10,
+			2
+		);
+		$this->controller()->handle(
+			array(
+				'path'     => '/p',
+				'method'   => 'GET',
+				'post_id'  => 1,
+				'singular' => true,
+				'headers'  => array(),
+			)
+		);
+		$this->assertIsArray( $seen );
+		$this->assertTrue( $seen['singular'] );
+		$this->assertSame( 1, $seen['post_id'] );
+	}
+
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 

@@ -14,9 +14,9 @@ use SimpleX402\Settings\SettingsRepository;
 /**
  * Callback for the `simple_x402_rule_for_request` filter at priority 10.
  *
- * Respects a higher-priority filter's answer if one is already set; otherwise
- * returns a paywall rule when the current post has the `paywall` tag or
- * category.
+ * Runs after {@see BotSingularPaywallRule} (priority 5). Respects an earlier
+ * filter's answer if one is already set; otherwise returns a paywall rule when
+ * the current post has the `paywall` tag or category.
  */
 final class DefaultPaywallRule {
 

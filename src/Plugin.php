@@ -11,6 +11,8 @@ namespace SimpleX402;
 
 use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\BotDetector;
+use SimpleX402\Services\BotSingularPaywallRule;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
@@ -39,8 +41,11 @@ final class Plugin {
 			new GrantStore(),
 			$settings
 		);
+		$bots         = new BotDetector( self::current_user_agent() );
+		$bot_singular = new BotSingularPaywallRule( $settings, $bots );
 		$default_rule = new DefaultPaywallRule( $settings );
 
+		add_filter( RuleResolver::HOOK, $bot_singular, 5, 2 );
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
 		if ( is_admin() ) {
@@ -61,10 +66,11 @@ final class Plugin {
 
 				$controller->handle(
 					array(
-						'path'    => $path,
-						'method'  => $method,
-						'post_id' => $post_id,
-						'headers' => self::collect_headers(),
+						'path'     => $path,
+						'method'   => $method,
+						'post_id'  => $post_id,
+						'singular' => is_singular(),
+						'headers'  => self::collect_headers(),
 					)
 				);
 
@@ -88,6 +94,15 @@ final class Plugin {
 				wp_insert_term( DefaultPaywallRule::TERM, $taxonomy );
 			}
 		}
+	}
+
+	/**
+	 * HTTP User-Agent for this request, unslashed (WordPress convention).
+	 */
+	private static function current_user_agent(): string {
+		return isset( $_SERVER['HTTP_USER_AGENT'] )
+			? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] )
+			: '';
 	}
 
 	/**
