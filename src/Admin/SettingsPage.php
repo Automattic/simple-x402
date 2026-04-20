@@ -77,6 +77,7 @@ final class SettingsPage {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
+			<?php settings_errors( SettingsRepository::OPTION_NAME ); ?>
 			<form method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
 				<table class="form-table" role="presentation">
