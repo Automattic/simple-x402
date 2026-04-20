@@ -124,7 +124,26 @@ if ( ! function_exists( 'set_transient' ) ) {
 		return true;
 	}
 }
-$GLOBALS['__sx402_terms'] = array();
+if ( ! function_exists( 'home_url' ) ) {
+	function home_url( string $path = '', ?string $scheme = null ): string {
+		return 'https://example.test' . $path;
+	}
+}
+if ( ! function_exists( 'status_header' ) ) {
+	function status_header( int $code ): void {
+		$GLOBALS['__sx402_response']['status'] = $code;
+	}
+}
+if ( ! function_exists( 'nocache_headers' ) ) {
+	function nocache_headers(): void {}
+}
+$GLOBALS['__sx402_terms']    = array();
+$GLOBALS['__sx402_response'] = array(
+	'status'  => 200,
+	'headers' => array(),
+	'body'    => null,
+	'exited'  => false,
+);
 
 // Reset global state between tests.
 $GLOBALS['__sx402_options']    = array();
