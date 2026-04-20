@@ -99,6 +99,10 @@ final class PaywallControllerTest extends TestCase {
 		$decoded = X402HeaderCodec::decode( $GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] );
 		$this->assertSame( '0xreceiver', $decoded['payTo'] );
 		$this->assertSame( '10000', $decoded['maxAmountRequired'] );
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( '0.01', $body['price'] );
+		$this->assertArrayHasKey( 'requirements', $body );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
 	}
 
@@ -130,8 +134,14 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$GLOBALS['__sx402_http_queue'] = array(
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xdead"}' ),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":true,"transaction":"0xdead"}',
+			),
 		);
 
 		$this->controller()->handle(
@@ -151,11 +161,17 @@ final class PaywallControllerTest extends TestCase {
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$payload = X402HeaderCodec::encode(
-			array( 'scheme' => 'exact', 'payload' => array() )
+			array(
+				'scheme'  => 'exact',
+				'payload' => array(),
+			)
 		);
 
 		$GLOBALS['__sx402_http_queue'] = array(
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":false,"invalidReason":"bad_sig"}' ),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":false,"invalidReason":"bad_sig"}',
+			),
 		);
 
 		$this->controller()->handle(
