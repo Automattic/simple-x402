@@ -124,16 +124,14 @@ final class PaywallController {
 		status_header( 402 );
 		$GLOBALS['__sx402_response']['headers']['Content-Type']     = 'application/json';
 		$GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] = X402HeaderCodec::encode( $requirements );
-		$GLOBALS['__sx402_response']['body']                        = wp_json_encode(
-			array_merge(
-				array(
-					'requirements' => $requirements,
-					'price'        => $price,
-				),
-				$body
-			)
+		// Use array union (+), not array_merge: keys in $body must not overwrite requirements/price.
+		$GLOBALS['__sx402_response']['body']   = wp_json_encode(
+			array(
+				'requirements' => $requirements,
+				'price'        => $price,
+			) + $body
 		);
-		$GLOBALS['__sx402_response']['exited']                      = true;
+		$GLOBALS['__sx402_response']['exited'] = true;
 	}
 
 	/**
