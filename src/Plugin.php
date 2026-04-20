@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402;
 
+use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
@@ -41,6 +42,10 @@ final class Plugin {
 		$default_rule = new DefaultPaywallRule( $settings );
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
+
+		if ( is_admin() ) {
+			( new SettingsPage( $settings ) )->register();
+		}
 
 		add_action(
 			'template_redirect',
