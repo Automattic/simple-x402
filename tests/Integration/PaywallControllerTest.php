@@ -44,6 +44,16 @@ final class PaywallControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Assert 402 JSON body includes requirements and the expected human-readable price (from the resolved rule).
+	 */
+	private function assert_402_body_has_price_and_requirements( string $expected_price ): void {
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( $expected_price, $body['price'] );
+		$this->assertArrayHasKey( 'requirements', $body );
+	}
+
 	public function test_passes_through_when_no_rule_matches(): void {
 		$this->controller()->handle(
 			array(
@@ -99,10 +109,7 @@ final class PaywallControllerTest extends TestCase {
 		$decoded = X402HeaderCodec::decode( $GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] );
 		$this->assertSame( '0xreceiver', $decoded['payTo'] );
 		$this->assertSame( '10000', $decoded['maxAmountRequired'] );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
-		$this->assertIsArray( $body );
-		$this->assertSame( '0.01', $body['price'] );
-		$this->assertArrayHasKey( 'requirements', $body );
+		$this->assert_402_body_has_price_and_requirements( '0.01' );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
 	}
 
@@ -184,6 +191,68 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_body_has_price_and_requirements( '0.01' );
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( 'verify_failed', $body['error'] );
+		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_invalid_signature_header_responds_402_with_price(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'PAYMENT-SIGNATURE' => 'not-valid-base64!!!' ),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_body_has_price_and_requirements( '0.01' );
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( 'invalid_signature_header', $body['error'] );
+		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_settle_failure_responds_402_with_price(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.25' ), 10, 2 );
+
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+
+		$GLOBALS['__sx402_http_queue'] = array(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":false,"errorReason":"on_chain_revert"}',
+			),
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_body_has_price_and_requirements( '0.25' );
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( 'settle_failed', $body['error'] );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
 	}
 }
