@@ -25,6 +25,10 @@ final class SettingsSaveOrchestratorTest extends TestCase {
 	}
 
 	// on_pre_update
+	//
+	// IMPORTANT: WordPress calls `pre_update_option_{option}` with args in
+	// (new_value, old_value) order. Tests below use that same convention so
+	// they fail if the method's parameter declaration gets swapped.
 
 	public function test_pre_update_passes_through_when_category_unchanged(): void {
 		$value = array( 'paywall_category' => 'paywall', 'paywall_mode' => 'category' );
@@ -34,10 +38,9 @@ final class SettingsSaveOrchestratorTest extends TestCase {
 	}
 
 	public function test_pre_update_passes_through_on_first_save(): void {
-		$out = $this->orchestrator->on_pre_update(
-			array(),
-			array( 'paywall_category' => 'paywall', 'paywall_mode' => 'category' )
-		);
+		// First save: no previously stored value. WP calls us with (new, old=[]).
+		$new = array( 'paywall_category' => 'paywall', 'paywall_mode' => 'category' );
+		$out = $this->orchestrator->on_pre_update( $new, array() );
 		$this->assertSame( 'paywall', $out['paywall_category'] );
 		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
 	}
@@ -47,23 +50,24 @@ final class SettingsSaveOrchestratorTest extends TestCase {
 		$GLOBALS['__sx402_existing_terms'] = array(
 			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category' ),
 		);
+		// WP convention: (new, old).
 		$out = $this->orchestrator->on_pre_update(
-			array( 'paywall_category' => 'paywall' ),
-			array( 'paywall_category' => 'Premium' )
+			array( 'paywall_category' => 'Premium' ),
+			array( 'paywall_category' => 'paywall' )
 		);
 		$this->assertSame( 'Premium', $out['paywall_category'] );
 		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
 	}
 
 	public function test_pre_update_reverts_on_collision_and_emits_error(): void {
-		// `Premium` already exists — rename must be blocked.
+		// `Premium` already exists separately — rename must be blocked.
 		$GLOBALS['__sx402_existing_terms'] = array(
 			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category' ),
 			array( 'term_id' => 2, 'name' => 'Premium', 'taxonomy' => 'category' ),
 		);
 		$out = $this->orchestrator->on_pre_update(
-			array( 'paywall_category' => 'paywall' ),
-			array( 'paywall_category' => 'Premium' )
+			array( 'paywall_category' => 'Premium' ),
+			array( 'paywall_category' => 'paywall' )
 		);
 		$this->assertSame( 'paywall', $out['paywall_category'] );
 		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
@@ -71,8 +75,73 @@ final class SettingsSaveOrchestratorTest extends TestCase {
 	}
 
 	public function test_pre_update_ignores_non_array_value(): void {
-		$out = $this->orchestrator->on_pre_update( array(), 'garbage' );
+		// First arg is the new value per WP; non-array returns unchanged.
+		$out = $this->orchestrator->on_pre_update( 'garbage', array() );
 		$this->assertSame( 'garbage', $out );
+	}
+
+	// Regression tests for the user-reported bug: renaming a stored category to
+	// a non-existing target should *just rename*, not emit a collision error.
+	// This fails hard if the method parameters are swapped.
+
+	public function test_pre_update_allows_rename_to_non_existing_target(): void {
+		// Reproduces the reported scenario: paywall_category='test' stored,
+		// admin submits 'test1'. 'test1' does NOT exist — rename should proceed.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 1, 'name' => 'test', 'taxonomy' => 'category' ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'test1' ),
+			array( 'paywall_category' => 'test' )
+		);
+		$this->assertSame( 'test1', $out['paywall_category'] );
+		$this->assertSame(
+			array(),
+			$GLOBALS['__sx402_settings_errors'],
+			'Renaming to a non-existing target must not emit a collision error.'
+		);
+	}
+
+	public function test_pre_update_emits_exactly_one_collision_notice(): void {
+		// User's reported scenario: stored paywall_category='test', submitted
+		// 'paywall' (which exists as default). Assert only ONE error notice
+		// is queued from a single on_pre_update call. If the user sees the
+		// message twice in the admin, the duplication is in the render layer.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 1, 'name' => 'test', 'taxonomy' => 'category' ),
+			array( 'term_id' => 2, 'name' => 'paywall', 'taxonomy' => 'category' ),
+		);
+		$this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'paywall' ),
+			array( 'paywall_category' => 'test' )
+		);
+		$this->assertCount(
+			1,
+			$GLOBALS['__sx402_settings_errors'],
+			'A single save must queue exactly one collision notice.'
+		);
+	}
+
+	public function test_pre_update_preserves_other_fields_from_new_value(): void {
+		// If pre_update mutates the wrong array, the admin's changes to
+		// unrelated fields (mode, price) will be silently dropped and the
+		// "old" array will be persisted instead. Catch that.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category' ),
+		);
+		$new = array(
+			'paywall_category' => 'paywall',
+			'paywall_mode'     => 'all-posts',
+			'default_price'    => '0.05',
+		);
+		$old = array(
+			'paywall_category' => 'paywall',
+			'paywall_mode'     => 'category',
+			'default_price'    => '0.01',
+		);
+		$out = $this->orchestrator->on_pre_update( $new, $old );
+		$this->assertSame( 'all-posts', $out['paywall_mode'] );
+		$this->assertSame( '0.05', $out['default_price'] );
 	}
 
 	// on_update

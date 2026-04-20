@@ -35,12 +35,16 @@ final class SettingsSaveOrchestrator {
 	/**
 	 * Filter callback for `pre_update_option_<OPTION>`.
 	 *
-	 * @param mixed $value     Incoming sanitised value.
-	 * @param mixed $old_value Previously stored value.
+	 * WordPress passes args as (new_value, old_value, option) — the parameter
+	 * order here must match, or pre-update comparisons run backwards and the
+	 * returned value is the old array instead of the new one (data loss).
+	 *
+	 * @param mixed $value     Incoming sanitised value (WP's first arg).
+	 * @param mixed $old_value Previously stored value (WP's second arg).
 	 *
 	 * @return mixed The value to persist — may be mutated to revert a collision.
 	 */
-	public function on_pre_update( $old_value, $value ) {
+	public function on_pre_update( $value, $old_value ) {
 		if ( ! is_array( $value ) ) {
 			return $value;
 		}
