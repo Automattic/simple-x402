@@ -60,6 +60,59 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 'all-posts', $repo->paywall_mode() );
 	}
 
+	public function test_paywall_audience_defaults_to_none(): void {
+		$repo = new SettingsRepository();
+		$this->assertSame( 'none', $repo->paywall_audience() );
+	}
+
+	public function test_paywall_audience_reads_stored_everyone(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_audience' => 'everyone',
+			)
+		);
+		$this->assertSame( 'everyone', $repo->paywall_audience() );
+	}
+
+	public function test_paywall_audience_reads_stored_bots(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_audience' => 'bots',
+			)
+		);
+		$this->assertSame( 'bots', $repo->paywall_audience() );
+	}
+
+	public function test_paywall_audience_reads_stored_none(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_audience' => 'none',
+			)
+		);
+		$this->assertSame( 'none', $repo->paywall_audience() );
+	}
+
+	public function test_paywall_audience_falls_back_on_invalid_value(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.01',
+				'paywall_audience' => 'nonsense',
+			)
+		);
+		$this->assertSame( 'none', $repo->paywall_audience() );
+	}
+
 	public function test_paywall_mode_falls_back_on_invalid_value(): void {
 		$repo = new SettingsRepository();
 		$repo->save(

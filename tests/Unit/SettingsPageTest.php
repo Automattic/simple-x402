@@ -57,6 +57,7 @@ final class SettingsPageTest extends TestCase {
 				'wallet_address'           => '0xABC',
 				'default_price'            => '0.5',
 				'paywall_mode'             => 'category',
+				'paywall_audience'         => 'none',
 				'paywall_category_term_id' => 2,
 			),
 			$result
@@ -130,7 +131,7 @@ final class SettingsPageTest extends TestCase {
 		);
 	}
 
-	public function test_render_groups_fields_under_two_h2_sections(): void {
+	public function test_render_groups_fields_under_three_h2_sections(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
@@ -138,10 +139,51 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*What to paywall\s*<\/h2>/', $html );
+		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Who to paywall\s*<\/h2>/', $html );
 		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Where to send the funds\s*<\/h2>/', $html );
 	}
 
-	public function test_render_places_what_section_before_where_section(): void {
+	public function test_render_shows_three_audience_options_with_default_checked(): void {
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'value="everyone"', $html );
+		$this->assertStringContainsString( 'value="bots"', $html );
+		$this->assertStringContainsString( 'value="none"', $html );
+		$this->assertMatchesRegularExpression(
+			'/value="none"[^>]*checked/',
+			$html
+		);
+	}
+
+	public function test_render_checks_stored_audience(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'category',
+			'paywall_audience'         => 'bots',
+			'paywall_category_term_id' => 1,
+		);
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/value="bots"[^>]*checked/',
+			$html
+		);
+		$this->assertDoesNotMatchRegularExpression(
+			'/value="none"[^>]*checked/',
+			$html
+		);
+	}
+
+	public function test_render_sections_ordered_what_who_where(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
@@ -149,11 +191,14 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$what_pos  = strpos( $html, 'What to paywall' );
+		$who_pos   = strpos( $html, 'Who to paywall' );
 		$where_pos = strpos( $html, 'Where to send the funds' );
 
 		$this->assertNotFalse( $what_pos );
+		$this->assertNotFalse( $who_pos );
 		$this->assertNotFalse( $where_pos );
-		$this->assertLessThan( $where_pos, $what_pos );
+		$this->assertLessThan( $who_pos, $what_pos );
+		$this->assertLessThan( $where_pos, $who_pos );
 	}
 
 	public function test_render_disables_category_dropdown_when_mode_is_all_posts(): void {
