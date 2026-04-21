@@ -13,7 +13,6 @@ use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
-use SimpleX402\Services\BotSingularPaywallRule;
 use SimpleX402\Services\CategoryRepository;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
@@ -46,14 +45,12 @@ final class Plugin {
 			$settings
 		);
 		$bots         = new BotDetector( self::current_user_agent() );
-		$bot_singular = new BotSingularPaywallRule( $settings, $bots );
-		$default_rule = new DefaultPaywallRule( $settings );
+		$default_rule = new DefaultPaywallRule( $settings, $bots );
 		$categories   = new CategoryRepository();
 		$notifier     = new SettingsChangeNotifier();
 		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
 		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
 
-		add_filter( RuleResolver::HOOK, $bot_singular, 5, 2 );
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
 		add_action(

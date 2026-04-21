@@ -20,6 +20,9 @@ namespace SimpleX402\Settings;
  *  - paywall_category_term_id: term_id of the category used in `category` mode.
  *                              Stable identity — survives renames in Settings →
  *                              Categories without any action from this plugin.
+ *  - paywall_audience:         `everyone`, `bots`, or `none` — who the paywall
+ *                              applies to. Mode decides which posts; audience
+ *                              decides which visitors see the gate.
  */
 final class SettingsRepository {
 
@@ -31,6 +34,16 @@ final class SettingsRepository {
 	public const MODE_ALL_POSTS = 'all-posts';
 	public const VALID_MODES    = array( self::MODE_CATEGORY, self::MODE_ALL_POSTS );
 	public const DEFAULT_MODE   = self::MODE_CATEGORY;
+
+	public const AUDIENCE_EVERYONE = 'everyone';
+	public const AUDIENCE_BOTS     = 'bots';
+	public const AUDIENCE_NONE     = 'none';
+	public const VALID_AUDIENCES   = array(
+		self::AUDIENCE_EVERYONE,
+		self::AUDIENCE_BOTS,
+		self::AUDIENCE_NONE,
+	);
+	public const DEFAULT_AUDIENCE  = self::AUDIENCE_NONE;
 
 	/**
 	 * Configured receiving wallet address, or '' if not set.
@@ -59,6 +72,15 @@ final class SettingsRepository {
 		$stored = get_option( self::OPTION_NAME, array() );
 		$mode   = is_array( $stored ) ? (string) ( $stored['paywall_mode'] ?? '' ) : '';
 		return in_array( $mode, self::VALID_MODES, true ) ? $mode : self::DEFAULT_MODE;
+	}
+
+	/**
+	 * Configured paywall audience, falling back to DEFAULT_AUDIENCE if unset or invalid.
+	 */
+	public function paywall_audience(): string {
+		$stored   = get_option( self::OPTION_NAME, array() );
+		$audience = is_array( $stored ) ? (string) ( $stored['paywall_audience'] ?? '' ) : '';
+		return in_array( $audience, self::VALID_AUDIENCES, true ) ? $audience : self::DEFAULT_AUDIENCE;
 	}
 
 	/**
@@ -95,6 +117,10 @@ final class SettingsRepository {
 		if ( ! in_array( $mode, self::VALID_MODES, true ) ) {
 			$mode = self::DEFAULT_MODE;
 		}
+		$audience = isset( $input['paywall_audience'] ) ? (string) $input['paywall_audience'] : '';
+		if ( ! in_array( $audience, self::VALID_AUDIENCES, true ) ) {
+			$audience = self::DEFAULT_AUDIENCE;
+		}
 		$term_id = (int) ( $input['paywall_category_term_id'] ?? 0 );
 		if ( $term_id <= 0 || ! term_exists( $term_id, 'category' ) ) {
 			$term_id = $this->paywall_category_term_id();
@@ -103,6 +129,7 @@ final class SettingsRepository {
 			'wallet_address'           => $wallet,
 			'default_price'            => $price,
 			'paywall_mode'             => $mode,
+			'paywall_audience'         => $audience,
 			'paywall_category_term_id' => $term_id,
 		);
 	}

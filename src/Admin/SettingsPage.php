@@ -14,8 +14,9 @@ use SimpleX402\Settings\SettingsRepository;
 /**
  * Settings → Simple x402 admin page.
  *
- * Two sections:
+ * Three sections:
  *  - What to paywall: mode (category / all-posts) and the paywall category name.
+ *  - Who to paywall: audience (everyone / bots / none).
  *  - Where to send the funds: receiving wallet, price per request.
  *
  * Registered as an options page under Settings rather than its own top-level
@@ -103,11 +104,12 @@ final class SettingsPage {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$wallet  = $this->settings->wallet_address();
-		$price   = $this->settings->default_price();
-		$mode    = $this->settings->paywall_mode();
-		$term_id = $this->settings->paywall_category_term_id();
-		$option  = SettingsRepository::OPTION_NAME;
+		$wallet   = $this->settings->wallet_address();
+		$price    = $this->settings->default_price();
+		$mode     = $this->settings->paywall_mode();
+		$audience = $this->settings->paywall_audience();
+		$term_id  = $this->settings->paywall_category_term_id();
+		$option   = SettingsRepository::OPTION_NAME;
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
@@ -160,6 +162,46 @@ final class SettingsPage {
 									);
 									?>
 								</fieldset>
+							</fieldset>
+						</td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Who to paywall', 'simple-x402' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<?php esc_html_e( 'Which visitors should see the paywall?', 'simple-x402' ); ?>
+						</th>
+						<td>
+							<fieldset>
+								<label>
+									<input
+										type="radio"
+										name="<?php echo esc_attr( $option ); ?>[paywall_audience]"
+										value="<?php echo esc_attr( SettingsRepository::AUDIENCE_EVERYONE ); ?>"
+										<?php checked( $audience, SettingsRepository::AUDIENCE_EVERYONE ); ?>
+									/>
+									<?php esc_html_e( 'Everyone (humans and bots)', 'simple-x402' ); ?>
+								</label><br />
+								<label>
+									<input
+										type="radio"
+										name="<?php echo esc_attr( $option ); ?>[paywall_audience]"
+										value="<?php echo esc_attr( SettingsRepository::AUDIENCE_BOTS ); ?>"
+										<?php checked( $audience, SettingsRepository::AUDIENCE_BOTS ); ?>
+									/>
+									<?php esc_html_e( 'Only detected bots and crawlers', 'simple-x402' ); ?>
+								</label><br />
+								<label>
+									<input
+										type="radio"
+										name="<?php echo esc_attr( $option ); ?>[paywall_audience]"
+										value="<?php echo esc_attr( SettingsRepository::AUDIENCE_NONE ); ?>"
+										<?php checked( $audience, SettingsRepository::AUDIENCE_NONE ); ?>
+									/>
+									<?php esc_html_e( 'No one (paywall disabled)', 'simple-x402' ); ?>
+								</label>
 							</fieldset>
 						</td>
 					</tr>
