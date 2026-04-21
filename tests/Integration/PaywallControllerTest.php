@@ -131,6 +131,69 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 
+	public function test_bypass_filter_can_widen_to_non_admin(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'simple_x402_bypass_paywall', static fn () => true, 10, 3 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bypass_filter_can_override_admin_default(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+		add_filter( 'simple_x402_bypass_paywall', static fn () => false, 10, 3 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bypass_filter_receives_request_and_rule(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$seen = null;
+		add_filter(
+			'simple_x402_bypass_paywall',
+			static function ( $bypass, $request, $rule ) use ( &$seen ) {
+				$seen = array( 'request' => $request, 'rule' => $rule );
+				return $bypass;
+			},
+			10,
+			3
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 42,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertIsArray( $seen );
+		$this->assertSame( '/foo', $seen['request']['path'] );
+		$this->assertSame( 42, $seen['request']['post_id'] );
+		$this->assertSame( '0.01', $seen['rule']['price'] );
+	}
+
 	public function test_allows_request_with_live_grant(): void {
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		( new GrantStore() )->issue( '0xbuyer', '/foo', 60, array() );

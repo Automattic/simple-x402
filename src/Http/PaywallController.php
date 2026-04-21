@@ -26,6 +26,8 @@ use SimpleX402\Settings\SettingsRepository;
  */
 final class PaywallController {
 
+	public const BYPASS_HOOK = 'simple_x402_bypass_paywall';
+
 	public function __construct(
 		private readonly RuleResolver $rules,
 		private readonly PaymentRequirementsBuilder $builder,
@@ -50,9 +52,11 @@ final class PaywallController {
 			return;
 		}
 
-		// Administrators bypass the paywall so they can preview and manage
-		// paywalled content without completing a payment.
-		if ( current_user_can( 'manage_options' ) ) {
+		// Administrators bypass by default so they can preview and manage
+		// paywalled content. Extenders can widen or narrow this via the
+		// `simple_x402_bypass_paywall` filter (e.g. let post editors through,
+		// or force admins to pay for audit reasons).
+		if ( (bool) apply_filters( self::BYPASS_HOOK, current_user_can( 'manage_options' ), $request, $rule ) ) {
 			return;
 		}
 
