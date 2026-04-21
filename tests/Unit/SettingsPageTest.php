@@ -155,7 +155,7 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertMatchesRegularExpression(
-			'/<select\s+disabled="disabled"[^>]*id="sx402-category"/',
+			'/<fieldset\b[^>]*\bid="sx402-category-wrap"[^>]*\bdisabled\b/',
 			$html
 		);
 	}
@@ -174,7 +174,7 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertDoesNotMatchRegularExpression(
-			'/<select[^>]*disabled[^>]*id="sx402-category"/',
+			'/<fieldset\b[^>]*\bid="sx402-category-wrap"[^>]*\bdisabled\b/',
 			$html
 		);
 	}
