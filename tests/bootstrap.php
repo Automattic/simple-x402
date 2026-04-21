@@ -114,14 +114,27 @@ if ( ! function_exists( 'add_filter' ) ) {
 	}
 }
 if ( ! function_exists( 'has_term' ) ) {
-	function has_term( string $term, string $taxonomy, int $post_id ): bool {
+	/**
+	 * @param string|int $term Term name or id.
+	 */
+	function has_term( $term, string $taxonomy, int $post_id ): bool {
 		return in_array( array( $term, $taxonomy, $post_id ), $GLOBALS['__sx402_terms'] ?? array(), true );
 	}
 }
 if ( ! function_exists( 'term_exists' ) ) {
-	function term_exists( string $term, string $taxonomy ) {
+	/**
+	 * @param string|int $term Term name or id.
+	 */
+	function term_exists( $term, string $taxonomy ) {
+		$is_id = is_int( $term ) || ( is_string( $term ) && ctype_digit( $term ) );
 		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
-			if ( $row['name'] === $term && $row['taxonomy'] === $taxonomy ) {
+			if ( $row['taxonomy'] !== $taxonomy ) {
+				continue;
+			}
+			$matches = $is_id
+				? (int) $row['term_id'] === (int) $term
+				: $row['name'] === $term;
+			if ( $matches ) {
 				return array( 'term_id' => $row['term_id'] );
 			}
 		}
@@ -304,6 +317,56 @@ if ( ! function_exists( 'wp_localize_script' ) ) {
 	function wp_localize_script( string $handle, string $object_name, array $data ): bool {
 		$GLOBALS['__sx402_localized_data'][ $handle ][ $object_name ] = $data;
 		return true;
+	}
+}
+if ( ! function_exists( 'wp_dropdown_categories' ) ) {
+	function wp_dropdown_categories( array $args = array() ) {
+		$name     = (string) ( $args['name'] ?? 'cat' );
+		$id       = (string) ( $args['id'] ?? '' );
+		$selected = (int) ( $args['selected'] ?? 0 );
+		$taxonomy = (string) ( $args['taxonomy'] ?? 'category' );
+		$echo     = ! empty( $args['echo'] );
+
+		$options = '';
+		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
+			if ( ( $row['taxonomy'] ?? '' ) !== $taxonomy ) {
+				continue;
+			}
+			$term_id = (int) $row['term_id'];
+			$is_sel  = $term_id === $selected ? ' selected="selected"' : '';
+			$options .= sprintf(
+				'<option value="%d"%s>%s</option>',
+				$term_id,
+				$is_sel,
+				htmlspecialchars( (string) $row['name'], ENT_QUOTES, 'UTF-8' )
+			);
+		}
+		$html = sprintf(
+			'<select name="%s" id="%s">%s</select>',
+			htmlspecialchars( $name, ENT_QUOTES, 'UTF-8' ),
+			htmlspecialchars( $id, ENT_QUOTES, 'UTF-8' ),
+			$options
+		);
+		if ( $echo ) {
+			echo $html;
+			return '';
+		}
+		return $html;
+	}
+}
+if ( ! class_exists( 'WP_Term' ) ) {
+	class WP_Term {
+		public int $term_id   = 0;
+		public string $name   = '';
+		public string $taxonomy = 'category';
+		public int $count     = 0;
+
+		public function __construct( int $term_id, string $name, string $taxonomy = 'category', int $count = 0 ) {
+			$this->term_id  = $term_id;
+			$this->name     = $name;
+			$this->taxonomy = $taxonomy;
+			$this->count    = $count;
+		}
 	}
 }
 $GLOBALS['__sx402_terms']           = array();

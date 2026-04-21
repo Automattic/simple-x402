@@ -9,13 +9,10 @@ declare(strict_types=1);
 
 namespace SimpleX402\Services;
 
+use SimpleX402\Settings\SettingsRepository;
+
 /**
  * Manages the WordPress `category` term used by the paywall.
- *
- * Two idempotent operations:
- *  - `ensure()`: create the term if it does not already exist.
- *  - `rename()`: change the name on an existing term, preserving `term_id` so
- *                post→term associations carry over.
  */
 final class CategoryRepository {
 
@@ -34,20 +31,17 @@ final class CategoryRepository {
 	}
 
 	/**
-	 * Rename a category term. Returns true if the rename happened, false if
-	 * `from` doesn't exist or either side is empty.
+	 * Resolve the default paywall term's id, creating it if missing. Always
+	 * returns a positive id on success; returns 0 only if `wp_insert_term`
+	 * itself fails (which in production indicates a broken taxonomy state).
 	 */
-	public function rename( string $from, string $to ): bool {
-		$from = trim( $from );
-		$to   = trim( $to );
-		if ( '' === $from || '' === $to ) {
-			return false;
+	public function ensure_default_term_id(): int {
+		$name     = SettingsRepository::DEFAULT_CATEGORY;
+		$existing = term_exists( $name, 'category' );
+		if ( is_array( $existing ) && isset( $existing['term_id'] ) ) {
+			return (int) $existing['term_id'];
 		}
-		$existing = term_exists( $from, 'category' );
-		if ( ! is_array( $existing ) || ! isset( $existing['term_id'] ) ) {
-			return false;
-		}
-		$result = wp_update_term( (int) $existing['term_id'], 'category', array( 'name' => $to ) );
-		return ! is_wp_error( $result );
+		$result = wp_insert_term( $name, 'category' );
+		return is_array( $result ) && isset( $result['term_id'] ) ? (int) $result['term_id'] : 0;
 	}
 }

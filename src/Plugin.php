@@ -11,6 +11,7 @@ namespace SimpleX402;
 
 use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
 use SimpleX402\Services\BotSingularPaywallRule;
 use SimpleX402\Services\CategoryRepository;
@@ -20,7 +21,6 @@ use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\PaywallCategoryGuard;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\SettingsChangeNotifier;
-use SimpleX402\Services\SettingsSaveOrchestrator;
 use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Settings\SettingsRepository;
 
@@ -50,21 +50,15 @@ final class Plugin {
 		$default_rule = new DefaultPaywallRule( $settings );
 		$categories   = new CategoryRepository();
 		$notifier     = new SettingsChangeNotifier();
-		$orchestrator = new SettingsSaveOrchestrator( $categories, $notifier );
 		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
+		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
 
 		add_filter( RuleResolver::HOOK, $bot_singular, 5, 2 );
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
-		add_filter(
-			'pre_update_option_' . SettingsRepository::OPTION_NAME,
-			array( $orchestrator, 'on_pre_update' ),
-			10,
-			2
-		);
 		add_action(
 			'update_option_' . SettingsRepository::OPTION_NAME,
-			array( $orchestrator, 'on_update' ),
+			$mode_note,
 			10,
 			2
 		);
@@ -112,10 +106,18 @@ final class Plugin {
 	}
 
 	/**
-	 * Activation hook: ensure the default paywall category exists.
+	 * Activation hook: ensure the default paywall category exists and that
+	 * the stored setting binds to it (idempotent — preserves any existing
+	 * admin-chosen binding across reactivations).
 	 */
 	public static function activate(): void {
-		( new CategoryRepository() )->ensure( SettingsRepository::DEFAULT_CATEGORY );
+		$categories = new CategoryRepository();
+		$default_id = $categories->ensure_default_term_id();
+
+		$settings = new SettingsRepository();
+		if ( $settings->paywall_category_term_id() <= 0 ) {
+			$settings->set_paywall_category_term_id( $default_id );
+		}
 	}
 
 	/**

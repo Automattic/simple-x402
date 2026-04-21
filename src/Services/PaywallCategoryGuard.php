@@ -12,14 +12,12 @@ namespace SimpleX402\Services;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
- * Reacts to WordPress's `delete_term` action: if the term that was just deleted
- * matches the stored `paywall_category`, reset the setting to `DEFAULT_CATEGORY`
- * and re-`ensure()` that default term exists.
- *
- * Hooking the *post*-deletion action rather than `pre_delete_term` is deliberate:
- * if the admin deletes the default paywall term itself, we need the old row to
- * already be gone so `ensure()` can create a fresh replacement without
- * colliding on slug.
+ * Reacts to WordPress's `delete_term` action: if the deleted term is the one
+ * currently bound to `paywall_category_term_id`, ensure the default term
+ * exists and rebind the setting to it. Hooking the *post*-deletion action
+ * (rather than `pre_delete_term`) means the deleted row is already gone, so
+ * `ensure()` can create a fresh replacement without colliding on slug when
+ * the admin deletes the default term itself.
  */
 final class PaywallCategoryGuard {
 
@@ -32,7 +30,7 @@ final class PaywallCategoryGuard {
 	/**
 	 * Callback for the `delete_term` action.
 	 *
-	 * @param int    $term_id      Deleted term's ID (unused — the object carries everything we need).
+	 * @param int    $term_id      Deleted term's ID.
 	 * @param int    $tt_id        Deleted term taxonomy ID (unused).
 	 * @param string $taxonomy     Taxonomy slug.
 	 * @param mixed  $deleted_term The deleted term object (WP_Term in production).
@@ -41,16 +39,16 @@ final class PaywallCategoryGuard {
 		if ( 'category' !== $taxonomy ) {
 			return;
 		}
-		if ( ! is_object( $deleted_term ) ) {
-			return;
-		}
-		$name = isset( $deleted_term->name ) ? (string) $deleted_term->name : '';
-		if ( '' === $name || $name !== $this->settings->paywall_category() ) {
+		if ( $term_id !== $this->settings->paywall_category_term_id() ) {
 			return;
 		}
 
-		$this->settings->set_paywall_category( SettingsRepository::DEFAULT_CATEGORY );
-		$this->categories->ensure( SettingsRepository::DEFAULT_CATEGORY );
+		$default_id = $this->categories->ensure_default_term_id();
+		$this->settings->set_paywall_category_term_id( $default_id );
+
+		$name = is_object( $deleted_term ) && isset( $deleted_term->name )
+			? (string) $deleted_term->name
+			: SettingsRepository::DEFAULT_CATEGORY;
 		$this->notifier->notify_paywall_category_deleted( $name );
 	}
 }

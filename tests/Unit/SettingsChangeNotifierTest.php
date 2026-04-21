@@ -13,27 +13,6 @@ final class SettingsChangeNotifierTest extends TestCase {
 		$GLOBALS['__sx402_settings_errors'] = array();
 	}
 
-	public function test_notify_rename_succeeded_emits_info(): void {
-		( new SettingsChangeNotifier() )->notify_rename_succeeded( 'paywall', 'Premium' );
-		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
-		$err = $GLOBALS['__sx402_settings_errors'][0];
-		$this->assertSame( SettingsRepository::OPTION_NAME, $err['setting'] );
-		$this->assertSame( 'info', $err['type'] );
-		$this->assertStringContainsString( 'paywall', $err['message'] );
-		$this->assertStringContainsString( 'Premium', $err['message'] );
-		$this->assertStringContainsString( 'remain paywalled', $err['message'] );
-	}
-
-	public function test_notify_rename_collision_emits_error(): void {
-		( new SettingsChangeNotifier() )->notify_rename_collision( 'News' );
-		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
-		$err = $GLOBALS['__sx402_settings_errors'][0];
-		$this->assertSame( SettingsRepository::OPTION_NAME, $err['setting'] );
-		$this->assertSame( 'error', $err['type'] );
-		$this->assertStringContainsString( 'News', $err['message'] );
-		$this->assertStringContainsString( 'already exists', $err['message'] );
-	}
-
 	public function test_notify_paywall_category_deleted_emits_warning(): void {
 		( new SettingsChangeNotifier() )->notify_paywall_category_deleted( 'News' );
 		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
@@ -42,16 +21,6 @@ final class SettingsChangeNotifierTest extends TestCase {
 		$this->assertSame( 'warning', $err['type'] );
 		$this->assertStringContainsString( 'News', $err['message'] );
 		$this->assertStringContainsString( 'default', $err['message'] );
-	}
-
-	public function test_notify_existing_category_rejected_emits_error_with_count(): void {
-		( new SettingsChangeNotifier() )->notify_existing_category_rejected( 'News', 5 );
-		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
-		$err = $GLOBALS['__sx402_settings_errors'][0];
-		$this->assertSame( SettingsRepository::OPTION_NAME, $err['setting'] );
-		$this->assertSame( 'error', $err['type'] );
-		$this->assertStringContainsString( 'News', $err['message'] );
-		$this->assertStringContainsString( '5', $err['message'] );
 	}
 
 	public function test_notify_mode_switched_to_all_posts_emits_info(): void {

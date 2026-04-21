@@ -13,9 +13,13 @@ namespace SimpleX402\Settings;
  * Thin wrapper around a single wp_options row.
  *
  * Stores:
- *  - wallet_address: the site's Base Sepolia receiving address.
- *  - default_price:  USDC price applied to any paywalled request that does
- *                    not override it.
+ *  - wallet_address:           the site's Base Sepolia receiving address.
+ *  - default_price:            USDC price applied to any paywalled request that
+ *                              does not override it.
+ *  - paywall_mode:             `category` or `all-posts`.
+ *  - paywall_category_term_id: term_id of the category used in `category` mode.
+ *                              Stable identity — survives renames in Settings →
+ *                              Categories without any action from this plugin.
  */
 final class SettingsRepository {
 
@@ -58,12 +62,16 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Configured category term used by `category` mode, falling back to DEFAULT_CATEGORY.
+	 * Configured paywall category term_id, or 0 if unset / invalid.
+	 *
+	 * Returns the stored value verbatim — callers that need a guaranteed-valid
+	 * id should resolve the default via CategoryRepository::ensure_default_term_id().
+	 * Activation and the delete-term guard keep the stored id pointing at a real
+	 * term, so the happy path always returns a usable value.
 	 */
-	public function paywall_category(): string {
+	public function paywall_category_term_id(): int {
 		$stored = get_option( self::OPTION_NAME, array() );
-		$term   = is_array( $stored ) ? trim( (string) ( $stored['paywall_category'] ?? '' ) ) : '';
-		return '' === $term ? self::DEFAULT_CATEGORY : $term;
+		return is_array( $stored ) ? (int) ( $stored['paywall_category_term_id'] ?? 0 ) : 0;
 	}
 
 	/**
@@ -71,12 +79,9 @@ final class SettingsRepository {
 	 * `register_setting` sanitize_callback: it reads stored state but must not
 	 * write (calling `update_option` here recurses).
 	 *
-	 * For `paywall_category` we distinguish *absent* from *present+empty*:
-	 *  - absent (key missing, e.g. the UI disabled the input) → preserve stored
-	 *  - present+empty (admin cleared the field)              → apply default
-	 *
-	 * Conflating these caused the "switch to All posts silently resets your
-	 * category" bug, because a disabled input is omitted from POST entirely.
+	 * `paywall_category_term_id` is validated against `term_exists`. A missing
+	 * or non-existent id becomes 0 — the UI only submits valid dropdown options,
+	 * so invalid input here means a tampered POST.
 	 *
 	 * @param array $input Raw input.
 	 */
@@ -90,19 +95,15 @@ final class SettingsRepository {
 		if ( ! in_array( $mode, self::VALID_MODES, true ) ) {
 			$mode = self::DEFAULT_MODE;
 		}
-		if ( array_key_exists( 'paywall_category', $input ) ) {
-			$category = trim( (string) $input['paywall_category'] );
-			if ( '' === $category ) {
-				$category = self::DEFAULT_CATEGORY;
-			}
-		} else {
-			$category = $this->paywall_category();
+		$term_id = (int) ( $input['paywall_category_term_id'] ?? 0 );
+		if ( $term_id <= 0 || ! term_exists( $term_id, 'category' ) ) {
+			$term_id = $this->paywall_category_term_id();
 		}
 		return array(
-			'wallet_address'   => $wallet,
-			'default_price'    => $price,
-			'paywall_mode'     => $mode,
-			'paywall_category' => $category,
+			'wallet_address'           => $wallet,
+			'default_price'            => $price,
+			'paywall_mode'             => $mode,
+			'paywall_category_term_id' => $term_id,
 		);
 	}
 
@@ -117,20 +118,15 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Replace just the paywall_category, preserving every other field.
+	 * Replace just the paywall_category_term_id, preserving every other field.
 	 *
-	 * Deliberately bypasses sanitize(): callers that need a partial update
-	 * (e.g. reacting to an external taxonomy event) must not wipe unknown
-	 * fields out of the stored option. Empty input falls back to DEFAULT_CATEGORY.
+	 * Deliberately bypasses sanitize(): callers reacting to an external taxonomy
+	 * event (e.g. the delete-term guard) must not wipe unknown fields.
 	 */
-	public function set_paywall_category( string $name ): void {
-		$name = trim( $name );
-		if ( '' === $name ) {
-			$name = self::DEFAULT_CATEGORY;
-		}
-		$stored                     = get_option( self::OPTION_NAME, array() );
-		$stored                     = is_array( $stored ) ? $stored : array();
-		$stored['paywall_category'] = $name;
+	public function set_paywall_category_term_id( int $term_id ): void {
+		$stored                             = get_option( self::OPTION_NAME, array() );
+		$stored                             = is_array( $stored ) ? $stored : array();
+		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
 	}
 }

@@ -14,6 +14,10 @@ final class SettingsPageTest extends TestCase {
 		$GLOBALS['__sx402_registered_settings'] = array();
 		$GLOBALS['__sx402_enqueued_scripts']    = array();
 		$GLOBALS['__sx402_localized_data']      = array();
+		$GLOBALS['__sx402_existing_terms']      = array(
+			array( 'term_id' => 1, 'name' => 'x402paywall', 'taxonomy' => 'category' ),
+			array( 'term_id' => 2, 'name' => 'News', 'taxonomy' => 'category' ),
+		);
 	}
 
 	public function test_enqueue_assets_registers_script_on_plugin_page(): void {
@@ -42,17 +46,18 @@ final class SettingsPageTest extends TestCase {
 
 		$result = $callback(
 			array(
-				'wallet_address' => '0xABC',
-				'default_price'  => '0.5',
+				'wallet_address'           => '0xABC',
+				'default_price'            => '0.5',
+				'paywall_category_term_id' => 2,
 			)
 		);
 
 		$this->assertSame(
 			array(
-				'wallet_address'   => '0xABC',
-				'default_price'    => '0.5',
-				'paywall_mode'     => 'category',
-				'paywall_category' => SettingsRepository::DEFAULT_CATEGORY,
+				'wallet_address'           => '0xABC',
+				'default_price'            => '0.5',
+				'paywall_mode'             => 'category',
+				'paywall_category_term_id' => 2,
 			),
 			$result
 		);
@@ -79,10 +84,10 @@ final class SettingsPageTest extends TestCase {
 
 	public function test_render_shows_both_mode_options_with_stored_selected(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'   => '0xabc',
-			'default_price'    => '0.01',
-			'paywall_mode'     => 'all-posts',
-			'paywall_category' => 'paywall',
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'all-posts',
+			'paywall_category_term_id' => 1,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
 
@@ -102,12 +107,12 @@ final class SettingsPageTest extends TestCase {
 		);
 	}
 
-	public function test_render_shows_paywall_category_input_with_stored_value(): void {
+	public function test_render_shows_category_dropdown_with_stored_term_selected(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'   => '0xabc',
-			'default_price'    => '0.01',
-			'paywall_mode'     => 'category',
-			'paywall_category' => 'Premium',
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'category',
+			'paywall_category_term_id' => 2,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
 
@@ -116,7 +121,11 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertMatchesRegularExpression(
-			'/name="[^"]*\[paywall_category\]"[^>]*value="Premium"/',
+			'/<select[^>]*name="[^"]*\[paywall_category_term_id\]"/',
+			$html
+		);
+		$this->assertMatchesRegularExpression(
+			'/<option value="2" selected="selected">News<\/option>/',
 			$html
 		);
 	}
@@ -132,12 +141,12 @@ final class SettingsPageTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*What to paywall\s*<\/h2>/', $html );
 	}
 
-	public function test_render_disables_category_input_when_mode_is_all_posts(): void {
+	public function test_render_disables_category_dropdown_when_mode_is_all_posts(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'   => '0xabc',
-			'default_price'    => '0.01',
-			'paywall_mode'     => 'all-posts',
-			'paywall_category' => 'paywall',
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'all-posts',
+			'paywall_category_term_id' => 1,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
 
@@ -146,17 +155,17 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertMatchesRegularExpression(
-			'/<input[^>]*id="sx402-category"[^>]*disabled/',
+			'/<select\s+disabled="disabled"[^>]*id="sx402-category"/',
 			$html
 		);
 	}
 
-	public function test_render_does_not_disable_category_input_in_category_mode(): void {
+	public function test_render_does_not_disable_category_dropdown_in_category_mode(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'   => '0xabc',
-			'default_price'    => '0.01',
-			'paywall_mode'     => 'category',
-			'paywall_category' => 'paywall',
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'category',
+			'paywall_category_term_id' => 1,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
 
@@ -165,15 +174,12 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertDoesNotMatchRegularExpression(
-			'/<input[^>]*id="sx402-category"[^>]*disabled/',
+			'/<select[^>]*disabled[^>]*id="sx402-category"/',
 			$html
 		);
 	}
 
-	public function test_render_nests_category_input_inside_mode_fieldset(): void {
-		// The paywall_category input lives inside the same <fieldset> as the
-		// mode radios so it reads as part of the "Only posts in a specific
-		// category" option rather than a separate unrelated setting.
+	public function test_render_nests_category_dropdown_inside_mode_fieldset(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
@@ -181,14 +187,12 @@ final class SettingsPageTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertMatchesRegularExpression(
-			'/<fieldset[^>]*>[\s\S]*name="[^"]*\[paywall_category\]"[\s\S]*<\/fieldset>/',
+			'/<fieldset[^>]*>[\s\S]*name="[^"]*\[paywall_category_term_id\]"[\s\S]*<\/fieldset>/',
 			$html
 		);
 	}
 
 	public function test_render_places_all_posts_radio_before_category_radio(): void {
-		// "Only posts in a specific category" must sit directly above the
-		// paywall-category input so the two are visually associated.
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();

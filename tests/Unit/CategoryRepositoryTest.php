@@ -5,6 +5,7 @@ namespace SimpleX402\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Services\CategoryRepository;
+use SimpleX402\Settings\SettingsRepository;
 
 final class CategoryRepositoryTest extends TestCase {
 
@@ -40,38 +41,24 @@ final class CategoryRepositoryTest extends TestCase {
 		$this->assertSame( array(), $GLOBALS['__sx402_inserted_terms'] );
 	}
 
-	// rename()
+	// ensure_default_term_id()
 
-	public function test_rename_updates_existing_term_and_returns_true(): void {
+	public function test_ensure_default_term_id_returns_existing_id(): void {
 		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category' ),
+			array( 'term_id' => 9, 'name' => SettingsRepository::DEFAULT_CATEGORY, 'taxonomy' => 'category' ),
 		);
-		$result = ( new CategoryRepository() )->rename( 'paywall', 'Premium' );
-		$this->assertTrue( $result );
-		// Same term_id, renamed — posts keyed on term_id stay attached.
+		$id = ( new CategoryRepository() )->ensure_default_term_id();
+		$this->assertSame( 9, $id );
+		$this->assertSame( array(), $GLOBALS['__sx402_inserted_terms'] );
+	}
+
+	public function test_ensure_default_term_id_creates_when_missing(): void {
+		$id = ( new CategoryRepository() )->ensure_default_term_id();
+		$this->assertGreaterThan( 0, $id );
+		$this->assertCount( 1, $GLOBALS['__sx402_inserted_terms'] );
 		$this->assertSame(
-			array(
-				array( 'term_id' => 1, 'name' => 'Premium', 'taxonomy' => 'category' ),
-			),
-			$GLOBALS['__sx402_existing_terms']
+			SettingsRepository::DEFAULT_CATEGORY,
+			$GLOBALS['__sx402_inserted_terms'][0]['name']
 		);
-	}
-
-	public function test_rename_returns_false_when_from_term_does_not_exist(): void {
-		$result = ( new CategoryRepository() )->rename( 'paywall', 'Premium' );
-		$this->assertFalse( $result );
-	}
-
-	public function test_rename_returns_false_when_from_is_empty(): void {
-		$result = ( new CategoryRepository() )->rename( '', 'Premium' );
-		$this->assertFalse( $result );
-	}
-
-	public function test_rename_returns_false_when_to_is_empty(): void {
-		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category' ),
-		);
-		$result = ( new CategoryRepository() )->rename( 'paywall', '' );
-		$this->assertFalse( $result );
 	}
 }
