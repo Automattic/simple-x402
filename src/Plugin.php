@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402;
 
+use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
@@ -37,8 +38,9 @@ final class Plugin {
 	 */
 	public static function boot(): void {
 		$settings     = new SettingsRepository();
+		$rules        = new RuleResolver();
 		$controller   = new PaywallController(
-			new RuleResolver(),
+			$rules,
 			new PaymentRequirementsBuilder(),
 			new X402FacilitatorClient(),
 			new GrantStore(),
@@ -50,8 +52,11 @@ final class Plugin {
 		$notifier     = new SettingsChangeNotifier();
 		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
 		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
+		$indicator    = new PaywallIndicator( $rules );
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
+
+		$indicator->register();
 
 		add_action(
 			'update_option_' . SettingsRepository::OPTION_NAME,

@@ -358,6 +358,58 @@ if ( ! function_exists( 'wp_dropdown_categories' ) ) {
 		return $html;
 	}
 }
+if ( ! function_exists( 'admin_url' ) ) {
+	function admin_url( string $path = '', string $scheme = 'admin' ): string {
+		return 'https://example.test/wp-admin/' . ltrim( $path, '/' );
+	}
+}
+if ( ! function_exists( 'is_admin' ) ) {
+	function is_admin(): bool {
+		return (bool) ( $GLOBALS['__sx402_is_admin'] ?? false );
+	}
+}
+if ( ! function_exists( 'is_singular' ) ) {
+	function is_singular( $post_types = '' ): bool {
+		return (bool) ( $GLOBALS['__sx402_is_singular'] ?? false );
+	}
+}
+if ( ! function_exists( 'get_queried_object_id' ) ) {
+	function get_queried_object_id(): int {
+		return (int) ( $GLOBALS['__sx402_queried_object_id'] ?? 0 );
+	}
+}
+if ( ! function_exists( 'add_query_arg' ) ) {
+	function add_query_arg( $args = array() ): string {
+		return (string) ( $GLOBALS['__sx402_request_uri'] ?? '/' );
+	}
+}
+if ( ! function_exists( 'esc_html__' ) ) {
+	function esc_html__( string $text, string $domain = 'default' ): string {
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+if ( ! function_exists( 'esc_attr__' ) ) {
+	function esc_attr__( string $text, string $domain = 'default' ): string {
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+if ( ! function_exists( 'add_action' ) ) {
+	function add_action( string $hook, callable $cb, int $priority = 10, int $accepted_args = 1 ): bool {
+		$GLOBALS['__sx402_actions'][ $hook ][] = $cb;
+		return true;
+	}
+}
+if ( ! class_exists( 'WP_Admin_Bar' ) ) {
+	class WP_Admin_Bar {
+		/** @var array<int,array<string,mixed>> */
+		public array $nodes = array();
+
+		/** @param array<string,mixed> $args */
+		public function add_node( array $args ): void {
+			$this->nodes[] = $args;
+		}
+	}
+}
 if ( ! class_exists( 'WP_Term' ) ) {
 	class WP_Term {
 		public int $term_id   = 0;
