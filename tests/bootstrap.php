@@ -128,6 +128,23 @@ if ( ! function_exists( 'term_exists' ) ) {
 		return null;
 	}
 }
+if ( ! function_exists( 'get_term' ) ) {
+	function get_term( int $term_id, string $taxonomy = '' ) {
+		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
+			if ( $row['term_id'] === $term_id
+				&& ( '' === $taxonomy || $row['taxonomy'] === $taxonomy )
+			) {
+				$term           = new \stdClass();
+				$term->term_id  = $row['term_id'];
+				$term->name     = $row['name'];
+				$term->taxonomy = $row['taxonomy'];
+				$term->count    = (int) ( $row['count'] ?? 0 );
+				return $term;
+			}
+		}
+		return null;
+	}
+}
 if ( ! function_exists( 'wp_insert_term' ) ) {
 	function wp_insert_term( string $term, string $taxonomy ) {
 		$term_id = count( $GLOBALS['__sx402_existing_terms'] ?? array() ) + 1;

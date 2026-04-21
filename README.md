@@ -22,7 +22,7 @@ composer lint
 
 ## What it does
 
-- Adds a `paywall` category on activation.
+- Adds an `x402paywall` category on activation (distinctive so it won't collide with existing editorial categories).
 - Adds a Settings → Simple x402 page with: wallet address, default price, paywall mode, paywall category name.
 - Two selection modes for humans:
   - **Category** (default): gate only posts assigned to the configured category.

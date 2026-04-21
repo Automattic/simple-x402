@@ -111,13 +111,6 @@ final class SettingsPage {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
-			<?php
-			// Do NOT call settings_errors() here. WordPress's wp-admin/options-head.php
-			// already renders settings errors at the top of the page for submenu items
-			// under Settings (which is how add_options_page wires this up). Calling it
-			// a second time re-renders the static-cached errors, so every notice shows
-			// up twice in the admin.
-			?>
 			<form method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
 

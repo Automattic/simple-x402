@@ -60,9 +60,9 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 'category', $repo->paywall_mode() );
 	}
 
-	public function test_paywall_category_defaults_to_paywall(): void {
+	public function test_paywall_category_defaults_to_default_constant(): void {
 		$repo = new SettingsRepository();
-		$this->assertSame( 'paywall', $repo->paywall_category() );
+		$this->assertSame( SettingsRepository::DEFAULT_CATEGORY, $repo->paywall_category() );
 	}
 
 	public function test_paywall_category_read_back(): void {
@@ -86,7 +86,7 @@ final class SettingsRepositoryTest extends TestCase {
 				'paywall_category' => '   ',
 			)
 		);
-		$this->assertSame( 'paywall', $repo->paywall_category() );
+		$this->assertSame( SettingsRepository::DEFAULT_CATEGORY, $repo->paywall_category() );
 	}
 
 	public function test_sanitize_preserves_stored_category_when_key_absent(): void {
@@ -115,6 +115,37 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 'Premium', $repo->paywall_category() );
 	}
 
+	public function test_set_paywall_category_preserves_other_fields(): void {
+		// Narrow mutator must not go through sanitize() — it would clobber
+		// wallet_address, default_price, and paywall_mode on any partial write.
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'wallet_address'   => '0xabc',
+			'default_price'    => '0.25',
+			'paywall_mode'     => 'all-posts',
+			'paywall_category' => 'News',
+		);
+		$repo = new SettingsRepository();
+		$repo->set_paywall_category( 'Other' );
+		$this->assertSame(
+			array(
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.25',
+				'paywall_mode'     => 'all-posts',
+				'paywall_category' => 'Other',
+			),
+			$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ]
+		);
+	}
+
+	public function test_set_paywall_category_normalises_empty_to_default(): void {
+		$repo = new SettingsRepository();
+		$repo->set_paywall_category( '   ' );
+		$this->assertSame(
+			SettingsRepository::DEFAULT_CATEGORY,
+			$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ]['paywall_category']
+		);
+	}
+
 	public function test_sanitize_applies_default_when_key_present_but_empty(): void {
 		$repo = new SettingsRepository();
 		$repo->save(
@@ -134,6 +165,6 @@ final class SettingsRepositoryTest extends TestCase {
 				'paywall_category' => '',
 			)
 		);
-		$this->assertSame( 'paywall', $repo->paywall_category() );
+		$this->assertSame( SettingsRepository::DEFAULT_CATEGORY, $repo->paywall_category() );
 	}
 }

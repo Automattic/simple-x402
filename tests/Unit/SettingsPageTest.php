@@ -52,7 +52,7 @@ final class SettingsPageTest extends TestCase {
 				'wallet_address'   => '0xABC',
 				'default_price'    => '0.5',
 				'paywall_mode'     => 'category',
-				'paywall_category' => 'paywall',
+				'paywall_category' => SettingsRepository::DEFAULT_CATEGORY,
 			),
 			$result
 		);

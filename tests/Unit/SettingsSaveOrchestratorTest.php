@@ -122,6 +122,182 @@ final class SettingsSaveOrchestratorTest extends TestCase {
 		);
 	}
 
+	// First-save collision: admin sets the paywall category to a pre-existing,
+	// populated category on the very first save. Without this guard the plugin
+	// silently paywalls every post already in that category. See roast §1.
+
+	public function test_pre_update_first_save_blocks_populated_existing_category(): void {
+		// No stored option yet (WP passes `false` to pre_update_option_*; we
+		// defensively accept array() too). Admin picks `News` — already has posts.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 10, 'name' => 'News', 'taxonomy' => 'category', 'count' => 5 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'News', 'paywall_mode' => 'category' ),
+			false
+		);
+		$this->assertSame(
+			SettingsRepository::DEFAULT_CATEGORY,
+			$out['paywall_category'],
+			'Populated existing category must be rejected and reverted to the default.'
+		);
+		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
+		$this->assertSame( 'error', $GLOBALS['__sx402_settings_errors'][0]['type'] );
+		$this->assertStringContainsString(
+			'News',
+			$GLOBALS['__sx402_settings_errors'][0]['message']
+		);
+	}
+
+	public function test_pre_update_first_save_allows_default_empty_category(): void {
+		// Normal install flow: activate() created `paywall` empty. Admin opens
+		// settings and clicks Save with the pre-populated default. Must not block.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 1, 'name' => 'paywall', 'taxonomy' => 'category', 'count' => 0 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'paywall', 'paywall_mode' => 'category' ),
+			false
+		);
+		$this->assertSame( 'paywall', $out['paywall_category'] );
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
+	public function test_pre_update_first_save_allows_empty_existing_category(): void {
+		// Empty existing category — no silent-paywall risk because there are
+		// no posts to silently affect. Admin's explicit choice stands.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 7, 'name' => 'Drafts', 'taxonomy' => 'category', 'count' => 0 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'Drafts', 'paywall_mode' => 'category' ),
+			false
+		);
+		$this->assertSame( 'Drafts', $out['paywall_category'] );
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
+	public function test_pre_update_first_save_allows_new_category_name(): void {
+		// Brand-new name on first save — the ensure() in on_update will create it.
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'Premium', 'paywall_mode' => 'category' ),
+			false
+		);
+		$this->assertSame( 'Premium', $out['paywall_category'] );
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
+	public function test_pre_update_first_save_preserves_other_fields_on_revert(): void {
+		// When reverting the category on a first-save collision, unrelated
+		// fields the admin submitted (wallet, price, mode) must persist.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 10, 'name' => 'News', 'taxonomy' => 'category', 'count' => 5 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array(
+				'paywall_category' => 'News',
+				'paywall_mode'     => 'all-posts',
+				'wallet_address'   => '0xabc',
+				'default_price'    => '0.25',
+			),
+			false
+		);
+		$this->assertSame( 'all-posts', $out['paywall_mode'] );
+		$this->assertSame( '0xabc', $out['wallet_address'] );
+		$this->assertSame( '0.25', $out['default_price'] );
+	}
+
+	// Orphaned-rename cases: stored old category was deleted outside the
+	// plugin (e.g. from Categories admin, or via a direct DB edit that bypassed
+	// PaywallCategoryGuard). $old_cat !== $new_cat, but the old term no longer
+	// exists, so this isn't a rename — it's a reassignment. Treat it like a
+	// first-save: allow unless the target is an existing populated category.
+
+	public function test_pre_update_allows_reassignment_to_empty_target_when_old_term_is_ghost(): void {
+		// Stored = 'Premium' (term deleted), target = 'Drafts' (exists, empty).
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 5, 'name' => 'Drafts', 'taxonomy' => 'category', 'count' => 0 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'Drafts' ),
+			array( 'paywall_category' => 'Premium' )
+		);
+		$this->assertSame(
+			'Drafts',
+			$out['paywall_category'],
+			'Reassignment must not be blocked when the old term no longer exists.'
+		);
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
+	public function test_pre_update_blocks_orphaned_reassignment_to_populated_target(): void {
+		// Stored = 'Premium' (ghost), target = 'News' (exists, populated).
+		// Must use the populated-target error, NOT the rename-collision error,
+		// and must revert to DEFAULT_CATEGORY (not the ghost 'Premium', which
+		// would leave the admin stuck in the same broken state).
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 10, 'name' => 'News', 'taxonomy' => 'category', 'count' => 5 ),
+		);
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'News', 'paywall_mode' => 'category' ),
+			array( 'paywall_category' => 'Premium' )
+		);
+		$this->assertSame(
+			SettingsRepository::DEFAULT_CATEGORY,
+			$out['paywall_category'],
+			'Revert target must be the default, not the ghost old value.'
+		);
+		$codes = array_column( $GLOBALS['__sx402_settings_errors'], 'code' );
+		$this->assertContains(
+			'simple_x402_existing_category',
+			$codes,
+			'Orphaned reassignment should use the first-save populated error.'
+		);
+		$this->assertNotContains(
+			'simple_x402_category_collision',
+			$codes,
+			'Orphaned reassignment must not be labelled as a rename collision.'
+		);
+	}
+
+	public function test_orphaned_populated_collision_survives_full_save_lifecycle(): void {
+		// End-to-end: pre_update hands off to on_update. Pins the contract
+		// that on_pre_update's revert target (DEFAULT_CATEGORY, not the ghost)
+		// lets on_update heal the state rather than leaving the admin stuck
+		// pointing at a non-existent term.
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 10, 'name' => 'News', 'taxonomy' => 'category', 'count' => 5 ),
+		);
+		$old = array( 'paywall_category' => 'Premium', 'paywall_mode' => 'category' );
+		$new = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'News', 'paywall_mode' => 'category' ),
+			$old
+		);
+		$this->orchestrator->on_update( $old, $new );
+
+		$this->assertSame( SettingsRepository::DEFAULT_CATEGORY, $new['paywall_category'] );
+		// on_update sees old='Premium', new=DEFAULT; rename('Premium' → DEFAULT)
+		// fails (Premium is a ghost) and falls back to ensure(DEFAULT), which
+		// creates the default term fresh since it wasn't in existing_terms.
+		$this->assertCount( 1, $GLOBALS['__sx402_inserted_terms'] );
+		$this->assertSame(
+			SettingsRepository::DEFAULT_CATEGORY,
+			$GLOBALS['__sx402_inserted_terms'][0]['name']
+		);
+	}
+
+	public function test_pre_update_allows_orphaned_reassignment_to_new_name(): void {
+		// Stored = 'Premium' (ghost), target = 'Fresh' (doesn't exist anywhere).
+		// Regression guard: an orphaned old_cat must not make us over-cautious
+		// about brand-new names.
+		$out = $this->orchestrator->on_pre_update(
+			array( 'paywall_category' => 'Fresh' ),
+			array( 'paywall_category' => 'Premium' )
+		);
+		$this->assertSame( 'Fresh', $out['paywall_category'] );
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
 	public function test_pre_update_preserves_other_fields_from_new_value(): void {
 		// If pre_update mutates the wrong array, the admin's changes to
 		// unrelated fields (mode, price) will be silently dropped and the

@@ -50,12 +50,37 @@ final class SettingsSaveOrchestrator {
 		}
 		$old_cat = is_array( $old_value ) ? (string) ( $old_value['paywall_category'] ?? '' ) : '';
 		$new_cat = (string) ( $value['paywall_category'] ?? '' );
-		if ( '' === $old_cat || '' === $new_cat || $old_cat === $new_cat ) {
+		if ( '' === $new_cat || $old_cat === $new_cat ) {
 			return $value;
 		}
-		if ( term_exists( $new_cat, 'category' ) ) {
+
+		$existing = term_exists( $new_cat, 'category' );
+		if ( ! is_array( $existing ) || ! isset( $existing['term_id'] ) ) {
+			return $value;
+		}
+
+		// A "rename" requires both sides to exist: an old term to rename *from*
+		// and a new term colliding with the target. If $old_cat no longer exists
+		// (term deleted outside the plugin, PaywallCategoryGuard didn't run, etc.)
+		// this is a reassignment, not a rename — fall through to the first-save
+		// rules so the admin isn't trapped reverting to a ghost term.
+		$is_rename = '' !== $old_cat && is_array( term_exists( $old_cat, 'category' ) );
+
+		if ( $is_rename ) {
 			$value['paywall_category'] = $old_cat;
 			$this->notifier->notify_rename_collision( $new_cat );
+			return $value;
+		}
+
+		// First-save / orphaned-reassignment path. Adopting an existing term is
+		// only dangerous when it's populated — then we'd silently gate posts
+		// that belong to an unrelated editorial category. An empty term (e.g.
+		// the `paywall` default created at activation) is safe to adopt.
+		$term  = get_term( (int) $existing['term_id'], 'category' );
+		$count = is_object( $term ) && ! is_wp_error( $term ) ? (int) ( $term->count ?? 0 ) : 0;
+		if ( $count > 0 ) {
+			$value['paywall_category'] = SettingsRepository::DEFAULT_CATEGORY;
+			$this->notifier->notify_existing_category_rejected( $new_cat, $count );
 		}
 		return $value;
 	}

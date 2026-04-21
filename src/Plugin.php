@@ -17,6 +17,7 @@ use SimpleX402\Services\CategoryRepository;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
+use SimpleX402\Services\PaywallCategoryGuard;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\SettingsChangeNotifier;
 use SimpleX402\Services\SettingsSaveOrchestrator;
@@ -47,10 +48,10 @@ final class Plugin {
 		$bots         = new BotDetector( self::current_user_agent() );
 		$bot_singular = new BotSingularPaywallRule( $settings, $bots );
 		$default_rule = new DefaultPaywallRule( $settings );
-		$orchestrator = new SettingsSaveOrchestrator(
-			new CategoryRepository(),
-			new SettingsChangeNotifier()
-		);
+		$categories   = new CategoryRepository();
+		$notifier     = new SettingsChangeNotifier();
+		$orchestrator = new SettingsSaveOrchestrator( $categories, $notifier );
+		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
 
 		add_filter( RuleResolver::HOOK, $bot_singular, 5, 2 );
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
@@ -67,6 +68,11 @@ final class Plugin {
 			10,
 			2
 		);
+
+		// Heal the setting when the stored paywall category is deleted from
+		// outside the plugin (e.g. via the Categories admin screen). Without
+		// this, the paywall silently disables itself.
+		add_action( 'delete_term', $guard, 10, 4 );
 
 		if ( is_admin() ) {
 			( new SettingsPage( $settings ) )->register();

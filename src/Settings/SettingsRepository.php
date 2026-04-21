@@ -21,7 +21,7 @@ final class SettingsRepository {
 
 	public const OPTION_NAME      = 'simple_x402_settings';
 	public const DEFAULT_PRICE    = '0.01';
-	public const DEFAULT_CATEGORY = 'paywall';
+	public const DEFAULT_CATEGORY = 'x402paywall';
 
 	public const MODE_CATEGORY  = 'category';
 	public const MODE_ALL_POSTS = 'all-posts';
@@ -114,5 +114,23 @@ final class SettingsRepository {
 	 */
 	public function save( array $input ): void {
 		update_option( self::OPTION_NAME, $this->sanitize( $input ) );
+	}
+
+	/**
+	 * Replace just the paywall_category, preserving every other field.
+	 *
+	 * Deliberately bypasses sanitize(): callers that need a partial update
+	 * (e.g. reacting to an external taxonomy event) must not wipe unknown
+	 * fields out of the stored option. Empty input falls back to DEFAULT_CATEGORY.
+	 */
+	public function set_paywall_category( string $name ): void {
+		$name = trim( $name );
+		if ( '' === $name ) {
+			$name = self::DEFAULT_CATEGORY;
+		}
+		$stored                     = get_option( self::OPTION_NAME, array() );
+		$stored                     = is_array( $stored ) ? $stored : array();
+		$stored['paywall_category'] = $name;
+		update_option( self::OPTION_NAME, $stored );
 	}
 }
