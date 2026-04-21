@@ -137,8 +137,23 @@ final class SettingsPageTest extends TestCase {
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Payments\s*<\/h2>/', $html );
 		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*What to paywall\s*<\/h2>/', $html );
+		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Where to send the funds\s*<\/h2>/', $html );
+	}
+
+	public function test_render_places_what_section_before_where_section(): void {
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$what_pos  = strpos( $html, 'What to paywall' );
+		$where_pos = strpos( $html, 'Where to send the funds' );
+
+		$this->assertNotFalse( $what_pos );
+		$this->assertNotFalse( $where_pos );
+		$this->assertLessThan( $where_pos, $what_pos );
 	}
 
 	public function test_render_disables_category_dropdown_when_mode_is_all_posts(): void {

@@ -15,8 +15,8 @@ use SimpleX402\Settings\SettingsRepository;
  * Settings → Simple x402 admin page.
  *
  * Two sections:
- *  - Payments: receiving wallet, price per request.
  *  - What to paywall: mode (category / all-posts) and the paywall category name.
+ *  - Where to send the funds: receiving wallet, price per request.
  *
  * Registered as an options page under Settings rather than its own top-level
  * menu; the Settings API handles persistence.
@@ -114,45 +114,6 @@ final class SettingsPage {
 			<form method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
 
-				<h2><?php esc_html_e( 'Payments', 'simple-x402' ); ?></h2>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="sx402-wallet">
-								<?php esc_html_e( 'Receiving wallet', 'simple-x402' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								name="<?php echo esc_attr( $option ); ?>[wallet_address]"
-								id="sx402-wallet"
-								type="text"
-								class="regular-text"
-								value="<?php echo esc_attr( $wallet ); ?>"
-							/>
-							<p class="description">
-								<?php esc_html_e( 'USDC is sent to this address on Base Sepolia.', 'simple-x402' ); ?>
-							</p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<label for="sx402-price">
-								<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								name="<?php echo esc_attr( $option ); ?>[default_price]"
-								id="sx402-price"
-								type="text"
-								class="small-text"
-								value="<?php echo esc_attr( $price ); ?>"
-							/>
-						</td>
-					</tr>
-				</table>
-
 				<h2><?php esc_html_e( 'What to paywall', 'simple-x402' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
@@ -200,6 +161,45 @@ final class SettingsPage {
 									?>
 								</fieldset>
 							</fieldset>
+						</td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Where to send the funds', 'simple-x402' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<label for="sx402-wallet">
+								<?php esc_html_e( 'Receiving wallet', 'simple-x402' ); ?>
+							</label>
+						</th>
+						<td>
+							<input
+								name="<?php echo esc_attr( $option ); ?>[wallet_address]"
+								id="sx402-wallet"
+								type="text"
+								class="regular-text"
+								value="<?php echo esc_attr( $wallet ); ?>"
+							/>
+							<p class="description">
+								<?php esc_html_e( 'USDC is sent to this address on Base Sepolia.', 'simple-x402' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="sx402-price">
+								<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
+							</label>
+						</th>
+						<td>
+							<input
+								name="<?php echo esc_attr( $option ); ?>[default_price]"
+								id="sx402-price"
+								type="text"
+								class="small-text"
+								value="<?php echo esc_attr( $price ); ?>"
+							/>
 						</td>
 					</tr>
 				</table>
