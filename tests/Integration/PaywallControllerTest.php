@@ -29,9 +29,10 @@ final class PaywallControllerTest extends TestCase {
 			'body'    => null,
 			'exited'  => false,
 		);
-		$GLOBALS['__sx402_http']       = null;
-		$GLOBALS['__sx402_http_next']  = null;
-		$GLOBALS['__sx402_http_queue'] = array();
+		$GLOBALS['__sx402_http']            = null;
+		$GLOBALS['__sx402_http_next']       = null;
+		$GLOBALS['__sx402_http_queue']      = array();
+		$GLOBALS['__sx402_current_user_caps'] = array();
 	}
 
 	private function controller(): PaywallController {
@@ -111,6 +112,86 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertSame( '10000', $decoded['maxAmountRequired'] );
 		$this->assert_402_body_has_price_and_requirements( '0.01' );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_administrator_bypasses_paywall(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bypass_filter_can_widen_to_non_admin(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'simple_x402_bypass_paywall', static fn () => true, 10, 3 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bypass_filter_can_override_admin_default(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+		add_filter( 'simple_x402_bypass_paywall', static fn () => false, 10, 3 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bypass_filter_receives_request_and_rule(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$seen = null;
+		add_filter(
+			'simple_x402_bypass_paywall',
+			static function ( $bypass, $request, $rule ) use ( &$seen ) {
+				$seen = array( 'request' => $request, 'rule' => $rule );
+				return $bypass;
+			},
+			10,
+			3
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 42,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertIsArray( $seen );
+		$this->assertSame( '/foo', $seen['request']['path'] );
+		$this->assertSame( 42, $seen['request']['post_id'] );
+		$this->assertSame( '0.01', $seen['rule']['price'] );
 	}
 
 	public function test_allows_request_with_live_grant(): void {
