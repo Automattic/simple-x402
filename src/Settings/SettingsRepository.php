@@ -23,6 +23,10 @@ namespace SimpleX402\Settings;
  *  - paywall_audience:         `everyone`, `bots`, or `none` — who the paywall
  *                              applies to. Mode decides which posts; audience
  *                              decides which visitors see the gate.
+ *  - allow_search_engines:     Only consulted when audience = `bots`. When
+ *                              true, known search-engine indexers (Googlebot
+ *                              etc.) are let through so organic search keeps
+ *                              working; AI / agent crawlers still pay.
  */
 final class SettingsRepository {
 
@@ -44,6 +48,8 @@ final class SettingsRepository {
 		self::AUDIENCE_NONE,
 	);
 	public const DEFAULT_AUDIENCE  = self::AUDIENCE_NONE;
+
+	public const DEFAULT_ALLOW_SEARCH_ENGINES = true;
 
 	/**
 	 * Configured receiving wallet address, or '' if not set.
@@ -84,6 +90,21 @@ final class SettingsRepository {
 	}
 
 	/**
+	 * Whether known search-engine indexers bypass the bots audience.
+	 *
+	 * Defaults to true — preserves SEO indexability. Only consulted when
+	 * `paywall_audience` is `bots`; the flag is stored unconditionally but
+	 * has no effect for other audiences.
+	 */
+	public function allow_search_engines(): bool {
+		$stored = get_option( self::OPTION_NAME, array() );
+		if ( ! is_array( $stored ) || ! array_key_exists( 'allow_search_engines', $stored ) ) {
+			return self::DEFAULT_ALLOW_SEARCH_ENGINES;
+		}
+		return (bool) $stored['allow_search_engines'];
+	}
+
+	/**
 	 * Configured paywall category term_id, or 0 if unset / invalid.
 	 *
 	 * Returns the stored value verbatim — callers that need a guaranteed-valid
@@ -121,7 +142,15 @@ final class SettingsRepository {
 		if ( ! in_array( $audience, self::VALID_AUDIENCES, true ) ) {
 			$audience = self::DEFAULT_AUDIENCE;
 		}
-		$term_id = (int) ( $input['paywall_category_term_id'] ?? 0 );
+		// Present-but-falsy means the checkbox was rendered and unchecked
+		// (the hidden "0" companion input makes the key always present from
+		// the form). Absent means programmatic save that didn't know about
+		// this field — fall back to the default so old callers don't silently
+		// disable SEO indexing.
+		$allow_search_engines = array_key_exists( 'allow_search_engines', $input )
+			? ! empty( $input['allow_search_engines'] )
+			: self::DEFAULT_ALLOW_SEARCH_ENGINES;
+		$term_id              = (int) ( $input['paywall_category_term_id'] ?? 0 );
 		if ( $term_id <= 0 || ! term_exists( $term_id, 'category' ) ) {
 			$term_id = $this->paywall_category_term_id();
 		}
@@ -130,6 +159,7 @@ final class SettingsRepository {
 			'default_price'            => $price,
 			'paywall_mode'             => $mode,
 			'paywall_audience'         => $audience,
+			'allow_search_engines'     => $allow_search_engines,
 			'paywall_category_term_id' => $term_id,
 		);
 	}

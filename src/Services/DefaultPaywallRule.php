@@ -21,15 +21,17 @@ use SimpleX402\Settings\SettingsRepository;
  *  - `paywall_mode`     — which posts qualify (`category`, `all-posts`).
  *
  * Audience is checked first: `none` disables gating entirely, and `bots`
- * requires the request's User-Agent to match a known crawler. Audience-matched
- * requests then go through the same mode check, so bots and humans see the
- * same set of gated posts.
+ * requires the request's User-Agent to match a known crawler *other than* a
+ * search-engine indexer — Googlebot and friends are allowlisted so organic
+ * search indexing keeps working. Audience-matched requests then go through
+ * the same mode check, so bots and humans see the same set of gated posts.
  */
 final class DefaultPaywallRule {
 
 	public function __construct(
 		private readonly SettingsRepository $settings,
 		private readonly BotDetector $bots,
+		private readonly SearchEngineDetector $search_engines,
 	) {}
 
 	/**
@@ -44,8 +46,13 @@ final class DefaultPaywallRule {
 		if ( SettingsRepository::AUDIENCE_NONE === $audience ) {
 			return null;
 		}
-		if ( SettingsRepository::AUDIENCE_BOTS === $audience && ! $this->bots->is_bot() ) {
-			return null;
+		if ( SettingsRepository::AUDIENCE_BOTS === $audience ) {
+			if ( ! $this->bots->is_bot() ) {
+				return null;
+			}
+			if ( $this->settings->allow_search_engines() && $this->search_engines->is_search_engine() ) {
+				return null;
+			}
 		}
 		$post_id = (int) ( $ctx['post_id'] ?? 0 );
 		if ( $post_id <= 0 ) {

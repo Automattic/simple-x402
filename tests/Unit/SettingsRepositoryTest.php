@@ -22,9 +22,13 @@ final class SettingsRepositoryTest extends TestCase {
 
 	public function test_save_then_read(): void {
 		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 7, 'name' => 'Premium', 'taxonomy' => 'category' ),
+			array(
+				'term_id'  => 7,
+				'name'     => 'Premium',
+				'taxonomy' => 'category',
+			),
 		);
-		$repo = new SettingsRepository();
+		$repo                              = new SettingsRepository();
 		$repo->save(
 			array(
 				'wallet_address'           => '0xabc',
@@ -39,7 +43,12 @@ final class SettingsRepositoryTest extends TestCase {
 
 	public function test_save_rejects_negative_price(): void {
 		$repo = new SettingsRepository();
-		$repo->save( array( 'wallet_address' => '0xabc', 'default_price' => '-1' ) );
+		$repo->save(
+			array(
+				'wallet_address' => '0xabc',
+				'default_price'  => '-1',
+			)
+		);
 		$this->assertSame( '0.01', $repo->default_price() );
 	}
 
@@ -127,9 +136,13 @@ final class SettingsRepositoryTest extends TestCase {
 
 	public function test_sanitize_keeps_valid_term_id(): void {
 		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 42, 'name' => 'Premium', 'taxonomy' => 'category' ),
+			array(
+				'term_id'  => 42,
+				'name'     => 'Premium',
+				'taxonomy' => 'category',
+			),
 		);
-		$repo = new SettingsRepository();
+		$repo                              = new SettingsRepository();
 		$repo->save( array( 'paywall_category_term_id' => 42 ) );
 		$this->assertSame( 42, $repo->paywall_category_term_id() );
 	}
@@ -138,8 +151,12 @@ final class SettingsRepositoryTest extends TestCase {
 		// Admin had term_id=7 stored. Input arrives referencing id 9999 (stale
 		// dropdown, tampered POST). Sanitize must preserve the stored id, not
 		// drop to 0.
-		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 7, 'name' => 'Premium', 'taxonomy' => 'category' ),
+		$GLOBALS['__sx402_existing_terms']                             = array(
+			array(
+				'term_id'  => 7,
+				'name'     => 'Premium',
+				'taxonomy' => 'category',
+			),
 		);
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'paywall_category_term_id' => 7,
@@ -152,8 +169,12 @@ final class SettingsRepositoryTest extends TestCase {
 	public function test_sanitize_preserves_stored_term_id_when_key_absent(): void {
 		// The JS disables the dropdown when mode=all-posts; disabled controls
 		// aren't submitted. Sanitize must treat the absent key as "leave alone".
-		$GLOBALS['__sx402_existing_terms'] = array(
-			array( 'term_id' => 7, 'name' => 'Premium', 'taxonomy' => 'category' ),
+		$GLOBALS['__sx402_existing_terms']                             = array(
+			array(
+				'term_id'  => 7,
+				'name'     => 'Premium',
+				'taxonomy' => 'category',
+			),
 		);
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'paywall_category_term_id' => 7,
@@ -187,5 +208,47 @@ final class SettingsRepositoryTest extends TestCase {
 			),
 			$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ]
 		);
+	}
+
+	public function test_allow_search_engines_defaults_to_true(): void {
+		$repo = new SettingsRepository();
+		$this->assertTrue( $repo->allow_search_engines() );
+	}
+
+	public function test_allow_search_engines_reads_stored_false(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'       => '0xabc',
+				'default_price'        => '0.01',
+				'allow_search_engines' => '0',
+			)
+		);
+		$this->assertFalse( $repo->allow_search_engines() );
+	}
+
+	public function test_allow_search_engines_reads_stored_true(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address'       => '0xabc',
+				'default_price'        => '0.01',
+				'allow_search_engines' => '1',
+			)
+		);
+		$this->assertTrue( $repo->allow_search_engines() );
+	}
+
+	public function test_allow_search_engines_defaults_true_when_key_absent_from_save(): void {
+		// Programmatic save() that didn't know about the field must not
+		// silently disable SEO indexing — fall back to the default.
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'wallet_address' => '0xabc',
+				'default_price'  => '0.01',
+			)
+		);
+		$this->assertTrue( $repo->allow_search_engines() );
 	}
 }

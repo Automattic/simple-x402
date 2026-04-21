@@ -15,8 +15,16 @@ final class SettingsPageTest extends TestCase {
 		$GLOBALS['__sx402_enqueued_scripts']    = array();
 		$GLOBALS['__sx402_localized_data']      = array();
 		$GLOBALS['__sx402_existing_terms']      = array(
-			array( 'term_id' => 1, 'name' => 'x402paywall', 'taxonomy' => 'category' ),
-			array( 'term_id' => 2, 'name' => 'News', 'taxonomy' => 'category' ),
+			array(
+				'term_id'  => 1,
+				'name'     => 'x402paywall',
+				'taxonomy' => 'category',
+			),
+			array(
+				'term_id'  => 2,
+				'name'     => 'News',
+				'taxonomy' => 'category',
+			),
 		);
 	}
 
@@ -58,6 +66,7 @@ final class SettingsPageTest extends TestCase {
 				'default_price'            => '0.5',
 				'paywall_mode'             => 'category',
 				'paywall_audience'         => 'none',
+				'allow_search_engines'     => true,
 				'paywall_category_term_id' => 2,
 			),
 			$result
@@ -250,6 +259,58 @@ final class SettingsPageTest extends TestCase {
 			'/<fieldset[^>]*>[\s\S]*name="[^"]*\[paywall_category_term_id\]"[\s\S]*<\/fieldset>/',
 			$html
 		);
+	}
+
+	public function test_render_shows_allow_search_engines_checked_by_default(): void {
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/<input[^>]*type="checkbox"[^>]*name="[^"]*\[allow_search_engines\]"[^>]*checked/',
+			$html
+		);
+	}
+
+	public function test_render_shows_allow_search_engines_unchecked_when_stored_false(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'wallet_address'           => '0xabc',
+			'default_price'            => '0.01',
+			'paywall_mode'             => 'category',
+			'paywall_audience'         => 'bots',
+			'allow_search_engines'     => false,
+			'paywall_category_term_id' => 1,
+		);
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$this->assertDoesNotMatchRegularExpression(
+			'/<input[^>]*type="checkbox"[^>]*name="[^"]*\[allow_search_engines\]"[^>]*checked/',
+			$html
+		);
+	}
+
+	public function test_render_allow_search_engines_row_lives_in_who_section(): void {
+		$page = new SettingsPage( new SettingsRepository() );
+
+		ob_start();
+		$page->render();
+		$html = (string) ob_get_clean();
+
+		$who_pos      = strpos( $html, 'Who to paywall' );
+		$where_pos    = strpos( $html, 'Where to send the funds' );
+		$checkbox_pos = strpos( $html, 'allow_search_engines' );
+
+		$this->assertNotFalse( $who_pos );
+		$this->assertNotFalse( $where_pos );
+		$this->assertNotFalse( $checkbox_pos );
+		$this->assertGreaterThan( $who_pos, $checkbox_pos );
+		$this->assertLessThan( $where_pos, $checkbox_pos );
 	}
 
 	public function test_render_places_all_posts_radio_before_category_radio(): void {

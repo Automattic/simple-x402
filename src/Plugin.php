@@ -20,6 +20,7 @@ use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\PaywallCategoryGuard;
 use SimpleX402\Services\RuleResolver;
+use SimpleX402\Services\SearchEngineDetector;
 use SimpleX402\Services\SettingsChangeNotifier;
 use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Settings\SettingsRepository;
@@ -37,22 +38,24 @@ final class Plugin {
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
 	 */
 	public static function boot(): void {
-		$settings     = new SettingsRepository();
-		$rules        = new RuleResolver();
-		$controller   = new PaywallController(
+		$settings       = new SettingsRepository();
+		$rules          = new RuleResolver();
+		$controller     = new PaywallController(
 			$rules,
 			new PaymentRequirementsBuilder(),
 			new X402FacilitatorClient(),
 			new GrantStore(),
 			$settings
 		);
-		$bots         = new BotDetector( self::current_user_agent() );
-		$default_rule = new DefaultPaywallRule( $settings, $bots );
-		$categories   = new CategoryRepository();
-		$notifier     = new SettingsChangeNotifier();
-		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
-		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
-		$indicator    = new PaywallIndicator( $rules );
+		$user_agent     = self::current_user_agent();
+		$bots           = new BotDetector( $user_agent );
+		$search_engines = new SearchEngineDetector( $user_agent );
+		$default_rule   = new DefaultPaywallRule( $settings, $bots, $search_engines );
+		$categories     = new CategoryRepository();
+		$notifier       = new SettingsChangeNotifier();
+		$guard          = new PaywallCategoryGuard( $settings, $categories, $notifier );
+		$mode_note      = new AllPostsModeNoticeEmitter( $notifier );
+		$indicator      = new PaywallIndicator( $rules );
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
