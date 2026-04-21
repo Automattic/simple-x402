@@ -50,6 +50,12 @@ final class PaywallController {
 			return;
 		}
 
+		// Administrators bypass the paywall so they can preview and manage
+		// paywalled content without completing a payment.
+		if ( current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
 		$wallet_hint = (string) ( $request['headers']['X-Wallet-Address'] ?? '' );
 		if ( '' !== $wallet_hint && $this->grants->has_grant( $wallet_hint, $request['path'] ) ) {
 			return;

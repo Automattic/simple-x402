@@ -236,6 +236,10 @@ if ( ! function_exists( 'register_setting' ) ) {
 }
 if ( ! function_exists( 'current_user_can' ) ) {
 	function current_user_can( string $cap ): bool {
+		$caps = $GLOBALS['__sx402_current_user_caps'] ?? null;
+		if ( is_array( $caps ) ) {
+			return in_array( $cap, $caps, true );
+		}
 		return true;
 	}
 }
