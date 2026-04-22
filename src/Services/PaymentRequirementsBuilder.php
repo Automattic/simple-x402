@@ -18,7 +18,7 @@ namespace SimpleX402\Services;
  */
 final class PaymentRequirementsBuilder {
 
-	private const NETWORK = 'eip155:84532';
+	private const NETWORK = 'base-sepolia';
 	// phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- EVM contract address literal, not a numeric string.
 	private const ASSET          = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 	private const ASSET_DECIMALS = 6;
@@ -49,6 +49,10 @@ final class PaymentRequirementsBuilder {
 			'description'       => $description,
 			'mimeType'          => 'application/json',
 			'maxTimeoutSeconds' => self::MAX_TIMEOUT,
+			'extra'             => array(
+				'name'    => 'USDC',
+				'version' => '2',
+			),
 		);
 	}
 
