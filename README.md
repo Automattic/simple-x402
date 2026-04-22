@@ -20,17 +20,29 @@ composer test
 composer lint
 ```
 
+## Test client
+
+A small Node script under `scripts/` walks the full `402` → sign → retry flow against a paywalled URL on Base Sepolia.
+
+```bash
+cd scripts
+npm install                                       # one time
+PRIVATE_KEY=0x... node pay.mjs <paywalled-url>
+```
+
+The wallet must hold Base Sepolia USDC. No ETH needed — the x402.org facilitator pays gas via EIP-3009 `transferWithAuthorization`.
+
 ## What it does
 
 - Adds an `x402paywall` category on activation (distinctive so it won't collide with existing editorial categories).
 - Adds a Settings → Simple x402 page with: wallet address, default price, paywall audience, paywall mode, paywall category (picked from existing categories).
-- **Audience** decides who sees the paywall:
-  - **Everyone**: humans and detected bots.
-  - **Only bots/crawlers**: bots only, via `jaybizzle/crawler-detect`.
-  - **No one** (default): paywall disabled; pick one of the other options to turn it on.
 - **Mode** decides which posts qualify:
-  - **Category** (default): gate only posts assigned to the configured category.
+  - **No posts** (default): paywall disabled; pick another option to turn it on.
   - **All posts**: gate every published post of type `post`.
+  - **Category**: gate only posts assigned to the configured category.
+- **Audience** decides who sees the paywall once a post qualifies:
+  - **Everyone**: humans and detected bots.
+  - **Only bots/crawlers** (default): bots only, via `jaybizzle/crawler-detect`.
 - On any frontend request that matches both audience and mode, responds HTTP 402 with a `PAYMENT-REQUIRED` header and a JSON body, unless the request carries a valid `PAYMENT-SIGNATURE` (verified + settled via x402.org) or a live grant.
 
 Renaming the category in settings does not relabel existing posts — reassign them yourself if you rename.
