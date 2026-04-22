@@ -22,14 +22,15 @@ final class DefaultPaywallRuleTest extends TestCase {
 	}
 
 	private function set_options( array $overrides ): void {
-		// Default the audience to EVERYONE so the mode-centric cases don't
-		// accidentally get short-circuited by the audience gate. Cases that
-		// care about audience set it explicitly via $overrides.
+		// Default mode to CATEGORY (not the repo's `none` default, which would
+		// short-circuit every gating test) and audience to EVERYONE so the
+		// mode-centric cases don't accidentally fail the audience gate. Cases
+		// that care about either setting override them explicitly.
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array_merge(
 			array(
 				'wallet_address'           => '',
 				'default_price'            => '0.01',
-				'paywall_mode'             => SettingsRepository::DEFAULT_PAYWALL_MODE,
+				'paywall_mode'             => SettingsRepository::PAYWALL_MODE_CATEGORY,
 				'paywall_audience'         => SettingsRepository::AUDIENCE_EVERYONE,
 				'paywall_category_term_id' => self::DEFAULT_TERM_ID,
 			),
@@ -130,8 +131,8 @@ final class DefaultPaywallRuleTest extends TestCase {
 		$this->assertSame( $preset, $rule( $preset, array( 'post_id' => 99 ) ) );
 	}
 
-	public function test_audience_none_disables_paywall_even_on_matching_post(): void {
-		$this->set_options( array( 'paywall_audience' => SettingsRepository::AUDIENCE_NONE ) );
+	public function test_paywall_mode_none_disables_paywall_even_on_matching_post(): void {
+		$this->set_options( array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_NONE ) );
 		$GLOBALS['__sx402_terms'] = array( array( self::DEFAULT_TERM_ID, 'category', 7 ) );
 		$rule = $this->make_rule( self::BOT_UA );
 		$this->assertNull( $rule( null, array( 'post_id' => 7 ) ) );

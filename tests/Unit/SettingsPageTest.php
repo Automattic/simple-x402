@@ -58,8 +58,8 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( '0.5', $result['test']['default_price'] );
 		$this->assertSame( '0xLIVE', $result['live']['wallet_address'] );
 		$this->assertSame( 'k', $result['live']['facilitator_api_key'] );
-		$this->assertSame( 'category', $result['paywall_mode'] );
-		$this->assertSame( 'none', $result['paywall_audience'] );
+		$this->assertSame( 'none', $result['paywall_mode'] );
+		$this->assertSame( 'bots', $result['paywall_audience'] );
 		$this->assertSame( 2, $result['paywall_category_term_id'] );
 		// Regression: the callback must be pure (no persistence) so WP's
 		// update_option doesn't recurse during register_setting sanitization.
@@ -82,7 +82,7 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( '0.01', $result['test']['default_price'] );
 	}
 
-	public function test_render_shows_both_paywall_mode_options_with_stored_selected(): void {
+	public function test_render_shows_three_paywall_mode_options_with_stored_selected(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'mode' => 'test',
 			'paywall_mode' => 'all-posts',
@@ -94,8 +94,9 @@ final class SettingsPageTest extends TestCase {
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'value="category"', $html );
-		$this->assertStringContainsString( 'value="all-posts"', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[paywall_mode\]"[^>]*value="none"/', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[paywall_mode\]"[^>]*value="category"/', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[paywall_mode\]"[^>]*value="all-posts"/', $html );
 		$this->assertMatchesRegularExpression( '/value="all-posts"[^>]*checked/', $html );
 	}
 
@@ -131,17 +132,17 @@ final class SettingsPageTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Payment details\s*<\/h2>/', $html );
 	}
 
-	public function test_render_shows_three_audience_options_with_default_checked(): void {
+	public function test_render_shows_two_audience_options_with_default_checked(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'value="everyone"', $html );
-		$this->assertStringContainsString( 'value="bots"', $html );
-		$this->assertStringContainsString( 'value="none"', $html );
-		$this->assertMatchesRegularExpression( '/value="none"[^>]*checked/', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[paywall_audience\]"[^>]*value="everyone"/', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[paywall_audience\]"[^>]*value="bots"/', $html );
+		$this->assertDoesNotMatchRegularExpression( '/name="[^"]*\[paywall_audience\]"[^>]*value="none"/', $html );
+		$this->assertMatchesRegularExpression( '/value="bots"[^>]*checked/', $html );
 	}
 
 	public function test_render_orders_paywall_audience_payments(): void {

@@ -87,9 +87,9 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( '0.01', $repo->default_price() );
 	}
 
-	public function test_paywall_mode_defaults_to_category(): void {
+	public function test_paywall_mode_defaults_to_none(): void {
 		$repo = new SettingsRepository();
-		$this->assertSame( 'category', $repo->paywall_mode() );
+		$this->assertSame( 'none', $repo->paywall_mode() );
 	}
 
 	public function test_paywall_mode_reads_stored_all_posts(): void {
@@ -103,14 +103,14 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 'all-posts', $repo->paywall_mode() );
 	}
 
-	public function test_paywall_audience_defaults_to_none(): void {
+	public function test_paywall_audience_defaults_to_bots(): void {
 		$repo = new SettingsRepository();
-		$this->assertSame( 'none', $repo->paywall_audience() );
+		$this->assertSame( 'bots', $repo->paywall_audience() );
 	}
 
 	public function test_paywall_audience_reads_each_valid_value(): void {
 		$repo = new SettingsRepository();
-		foreach ( array( 'everyone', 'bots', 'none' ) as $value ) {
+		foreach ( array( 'everyone', 'bots' ) as $value ) {
 			$repo->save( array( 'mode' => 'test', 'paywall_audience' => $value ) );
 			$this->assertSame( $value, $repo->paywall_audience() );
 		}
@@ -119,13 +119,19 @@ final class SettingsRepositoryTest extends TestCase {
 	public function test_paywall_audience_falls_back_on_invalid_value(): void {
 		$repo = new SettingsRepository();
 		$repo->save( array( 'mode' => 'test', 'paywall_audience' => 'nonsense' ) );
-		$this->assertSame( 'none', $repo->paywall_audience() );
+		$this->assertSame( 'bots', $repo->paywall_audience() );
 	}
 
 	public function test_paywall_mode_falls_back_on_invalid_value(): void {
 		$repo = new SettingsRepository();
 		$repo->save( array( 'mode' => 'test', 'paywall_mode' => 'nonsense' ) );
-		$this->assertSame( 'category', $repo->paywall_mode() );
+		$this->assertSame( 'none', $repo->paywall_mode() );
+	}
+
+	public function test_paywall_mode_reads_stored_none(): void {
+		$repo = new SettingsRepository();
+		$repo->save( array( 'mode' => 'test', 'paywall_mode' => 'none' ) );
+		$this->assertSame( 'none', $repo->paywall_mode() );
 	}
 
 	public function test_sanitize_keeps_valid_term_id(): void {

@@ -22,8 +22,11 @@ use SimpleX402\Services\SettingsChangeNotifier;
  *                               `default_price`. The `live` block additionally
  *                               carries `facilitator_url` (optional override of
  *                               the default CDP endpoint) and `facilitator_api_key`.
- *   - paywall_mode:             'category' | 'all-posts'. Shared across modes.
- *   - paywall_audience:         'everyone' | 'bots' | 'none'. Shared.
+ *   - paywall_mode:             'none' | 'category' | 'all-posts'. `none`
+ *                               disables gating entirely; the other two pick
+ *                               which posts get gated. Shared across modes.
+ *   - paywall_audience:         'everyone' | 'bots'. Who the paywall targets
+ *                               once a post is selected for gating.
  *   - paywall_category_term_id: term_id of the category used in `category` mode.
  *                               Stable identity — survives renames in Settings →
  *                               Categories without any action from this plugin.
@@ -39,23 +42,23 @@ final class SettingsRepository {
 	public const DEFAULT_PRICE    = '0.01';
 	public const DEFAULT_CATEGORY = 'x402paywall';
 
+	public const PAYWALL_MODE_NONE      = 'none';
 	public const PAYWALL_MODE_CATEGORY  = 'category';
 	public const PAYWALL_MODE_ALL_POSTS = 'all-posts';
 	public const VALID_PAYWALL_MODES    = array(
+		self::PAYWALL_MODE_NONE,
 		self::PAYWALL_MODE_CATEGORY,
 		self::PAYWALL_MODE_ALL_POSTS,
 	);
-	public const DEFAULT_PAYWALL_MODE   = self::PAYWALL_MODE_CATEGORY;
+	public const DEFAULT_PAYWALL_MODE   = self::PAYWALL_MODE_NONE;
 
 	public const AUDIENCE_EVERYONE = 'everyone';
 	public const AUDIENCE_BOTS     = 'bots';
-	public const AUDIENCE_NONE     = 'none';
 	public const VALID_AUDIENCES   = array(
 		self::AUDIENCE_EVERYONE,
 		self::AUDIENCE_BOTS,
-		self::AUDIENCE_NONE,
 	);
-	public const DEFAULT_AUDIENCE  = self::AUDIENCE_NONE;
+	public const DEFAULT_AUDIENCE  = self::AUDIENCE_BOTS;
 
 	public const VALID_X402_MODES  = array( FacilitatorProfile::MODE_TEST, FacilitatorProfile::MODE_LIVE );
 	public const DEFAULT_X402_MODE = FacilitatorProfile::MODE_TEST;

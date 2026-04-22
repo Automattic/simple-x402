@@ -17,13 +17,14 @@ use SimpleX402\Settings\SettingsRepository;
  * Respects an earlier filter's answer if one is already set; otherwise returns
  * a paywall rule based on two settings:
  *
- *  - `paywall_audience` — who the paywall targets (`everyone`, `bots`, `none`).
- *  - `paywall_mode`     — which posts qualify (`category`, `all-posts`).
+ *  - `paywall_mode`     — which posts qualify (`none`, `category`, `all-posts`).
+ *                         `none` disables gating entirely.
+ *  - `paywall_audience` — who the paywall targets (`everyone`, `bots`).
+ *                         `bots` requires the request's User-Agent to match a
+ *                         known crawler.
  *
- * Audience is checked first: `none` disables gating entirely, and `bots`
- * requires the request's User-Agent to match a known crawler. Audience-matched
- * requests then go through the same mode check, so bots and humans see the
- * same set of gated posts.
+ * Mode is checked first so the disabled state short-circuits before any
+ * audience or post lookup.
  */
 final class DefaultPaywallRule {
 
@@ -40,11 +41,12 @@ final class DefaultPaywallRule {
 		if ( is_array( $rule ) ) {
 			return $rule;
 		}
-		$audience = $this->settings->paywall_audience();
-		if ( SettingsRepository::AUDIENCE_NONE === $audience ) {
+		if ( SettingsRepository::PAYWALL_MODE_NONE === $this->settings->paywall_mode() ) {
 			return null;
 		}
-		if ( SettingsRepository::AUDIENCE_BOTS === $audience && ! $this->bots->is_bot() ) {
+		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience()
+			&& ! $this->bots->is_bot()
+		) {
 			return null;
 		}
 		$post_id = (int) ( $ctx['post_id'] ?? 0 );
