@@ -5,14 +5,18 @@ namespace SimpleX402\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Services\FacilitatorProfile;
+use SimpleX402\Services\SettingsChangeNotifier;
 use SimpleX402\Settings\SettingsRepository;
 
 final class SettingsRepositoryTest extends TestCase {
 
+	private const VALID_LIVE_WALLET = '0x1111111111111111111111111111111111111111';
+
 	protected function setUp(): void {
-		$GLOBALS['__sx402_options']        = array();
-		$GLOBALS['__sx402_existing_terms'] = array();
-		$GLOBALS['__sx402_filters']        = array();
+		$GLOBALS['__sx402_options']         = array();
+		$GLOBALS['__sx402_existing_terms']  = array();
+		$GLOBALS['__sx402_filters']         = array();
+		$GLOBALS['__sx402_settings_errors'] = array();
 	}
 
 	public function test_defaults_when_nothing_stored(): void {
@@ -46,11 +50,16 @@ final class SettingsRepositoryTest extends TestCase {
 
 	public function test_switching_mode_surfaces_that_modes_wallet(): void {
 		$repo = new SettingsRepository();
+		$live = array(
+			'wallet_address'      => '0x1111111111111111111111111111111111111111',
+			'default_price'       => '0.01',
+			'facilitator_api_key' => 'k1',
+		);
 		$repo->save(
 			array(
 				'mode' => 'test',
 				'test' => array( 'wallet_address' => '0xTEST', 'default_price' => '0.0001' ),
-				'live' => array( 'wallet_address' => '0xLIVE', 'default_price' => '0.01' ),
+				'live' => $live,
 			)
 		);
 		$this->assertSame( '0xTEST', $repo->wallet_address() );
@@ -60,10 +69,10 @@ final class SettingsRepositoryTest extends TestCase {
 			array(
 				'mode' => 'live',
 				'test' => array( 'wallet_address' => '0xTEST', 'default_price' => '0.0001' ),
-				'live' => array( 'wallet_address' => '0xLIVE', 'default_price' => '0.01' ),
+				'live' => $live,
 			)
 		);
-		$this->assertSame( '0xLIVE', $repo->wallet_address() );
+		$this->assertSame( $live['wallet_address'], $repo->wallet_address() );
 		$this->assertSame( '0.01', $repo->default_price() );
 	}
 
@@ -176,7 +185,7 @@ final class SettingsRepositoryTest extends TestCase {
 			array(
 				'mode' => 'live',
 				'live' => array(
-					'wallet_address'      => '0xabc',
+					'wallet_address'      => '0x1111111111111111111111111111111111111111',
 					'default_price'       => '0.01',
 					'facilitator_url'     => 'https://facil.example/',
 					'facilitator_api_key' => 'k1',
@@ -213,5 +222,94 @@ final class SettingsRepositoryTest extends TestCase {
 			)
 		);
 		$this->assertSame( '', $repo->live_facilitator_url() );
+	}
+
+	public function test_sanitize_keeps_live_mode_when_live_block_is_complete(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save(
+			array(
+				'mode' => 'live',
+				'live' => array(
+					'wallet_address'      => self::VALID_LIVE_WALLET,
+					'default_price'       => '0.01',
+					'facilitator_api_key' => 'k1',
+				),
+			)
+		);
+		$this->assertSame( 'live', $repo->mode() );
+		$this->assertSame( array(), $GLOBALS['__sx402_settings_errors'] );
+	}
+
+	public function test_sanitize_reverts_live_mode_when_wallet_missing(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save(
+			array(
+				'mode' => 'live',
+				'live' => array(
+					'wallet_address'      => '',
+					'facilitator_api_key' => 'k1',
+				),
+			)
+		);
+		$this->assertSame( 'test', $repo->mode() );
+		$this->assertNotEmpty( $GLOBALS['__sx402_settings_errors'] );
+		$this->assertStringContainsString( 'receiving wallet address', $GLOBALS['__sx402_settings_errors'][0]['message'] );
+	}
+
+	public function test_sanitize_reverts_live_mode_when_wallet_malformed(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save(
+			array(
+				'mode' => 'live',
+				'live' => array(
+					'wallet_address'      => '0xabc',
+					'facilitator_api_key' => 'k1',
+				),
+			)
+		);
+		$this->assertSame( 'test', $repo->mode() );
+		$this->assertNotEmpty( $GLOBALS['__sx402_settings_errors'] );
+		$this->assertStringContainsString( '40 hex characters', $GLOBALS['__sx402_settings_errors'][0]['message'] );
+	}
+
+	public function test_sanitize_reverts_live_mode_when_api_key_missing(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save(
+			array(
+				'mode' => 'live',
+				'live' => array(
+					'wallet_address'      => self::VALID_LIVE_WALLET,
+					'facilitator_api_key' => '',
+				),
+			)
+		);
+		$this->assertSame( 'test', $repo->mode() );
+		$this->assertNotEmpty( $GLOBALS['__sx402_settings_errors'] );
+		$this->assertStringContainsString( 'facilitator API key', $GLOBALS['__sx402_settings_errors'][0]['message'] );
+	}
+
+	public function test_sanitize_emits_single_notice_listing_every_missing_requirement(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save( array( 'mode' => 'live' ) );
+		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
+		$message = $GLOBALS['__sx402_settings_errors'][0]['message'];
+		$this->assertStringContainsString( 'receiving wallet address', $message );
+		$this->assertStringContainsString( 'facilitator API key', $message );
+	}
+
+	public function test_sanitize_preserves_live_block_fields_even_when_mode_reverts(): void {
+		$repo = new SettingsRepository( new SettingsChangeNotifier() );
+		$repo->save(
+			array(
+				'mode' => 'live',
+				'live' => array(
+					'wallet_address'  => self::VALID_LIVE_WALLET,
+					'facilitator_url' => 'https://facil.example/',
+				),
+			)
+		);
+		$this->assertSame( 'test', $repo->mode() );
+		// Admin can fill in the missing api key later without re-typing the rest.
+		$this->assertSame( 'https://facil.example/', $repo->live_facilitator_url() );
 	}
 }

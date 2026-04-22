@@ -31,4 +31,16 @@ final class SettingsChangeNotifierTest extends TestCase {
 		$this->assertSame( 'info', $err['type'] );
 		$this->assertStringContainsString( 'Every published post', $err['message'] );
 	}
+
+	public function test_notify_live_mode_incomplete_emits_error_listing_each_reason(): void {
+		( new SettingsChangeNotifier() )->notify_live_mode_incomplete(
+			array( 'a wallet', 'an api key' )
+		);
+		$this->assertCount( 1, $GLOBALS['__sx402_settings_errors'] );
+		$err = $GLOBALS['__sx402_settings_errors'][0];
+		$this->assertSame( SettingsRepository::OPTION_NAME, $err['setting'] );
+		$this->assertSame( 'error', $err['type'] );
+		$this->assertStringContainsString( 'a wallet, an api key', $err['message'] );
+		$this->assertStringContainsString( 'test mode', $err['message'] );
+	}
 }

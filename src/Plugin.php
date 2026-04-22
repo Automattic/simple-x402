@@ -35,7 +35,8 @@ final class Plugin {
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
 	 */
 	public static function boot(): void {
-		$settings     = new SettingsRepository();
+		$notifier     = new SettingsChangeNotifier();
+		$settings     = new SettingsRepository( $notifier );
 		$rules        = new RuleResolver();
 		$controller   = new PaywallController(
 			$rules,
@@ -45,7 +46,6 @@ final class Plugin {
 		$bots         = new BotDetector( self::current_user_agent() );
 		$default_rule = new DefaultPaywallRule( $settings, $bots );
 		$categories   = new CategoryRepository();
-		$notifier     = new SettingsChangeNotifier();
 		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
 		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
 		$indicator    = new PaywallIndicator( $rules );
