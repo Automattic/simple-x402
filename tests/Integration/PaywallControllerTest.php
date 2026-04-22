@@ -36,11 +36,11 @@ final class PaywallControllerTest extends TestCase {
 		$GLOBALS['__sx402_current_user_caps'] = array();
 	}
 
-	private function controller(): PaywallController {
+	private function controller( ?SettingsRepository $settings = null ): PaywallController {
 		return new PaywallController(
 			new RuleResolver(),
 			new GrantStore(),
-			new SettingsRepository()
+			$settings ?? new SettingsRepository()
 		);
 	}
 
@@ -338,25 +338,16 @@ final class PaywallControllerTest extends TestCase {
 
 	/**
 	 * Regression guard for the lazy-profile refactor: a request that matches
-	 * no paywall rule must not resolve the FacilitatorProfile. The cheap proxy
-	 * for "profile was resolved" is whether the `simple_x402_mode` filter fired
-	 * (SettingsRepository::mode() is the only path that triggers it, and
-	 * facilitator_profile() calls mode() internally).
+	 * no paywall rule must never touch the facilitator layer. Without this
+	 * guard, every admin dashboard hit, AJAX poll, REST call, and cron tick
+	 * would pay for profile resolution + service construction it never needs.
 	 *
-	 * Without this guard, every admin dashboard hit, AJAX poll, REST call, and
-	 * cron tick pays for a filter firing + get_option it never needs.
+	 * We assert it via reflection on the private fields — they're null iff
+	 * the lazy accessors were never invoked.
 	 */
-	public function test_no_rule_match_does_not_resolve_facilitator_profile(): void {
-		$filter_fires = 0;
-		add_filter(
-			SettingsRepository::MODE_OVERRIDE_HOOK,
-			static function ( $mode ) use ( &$filter_fires ) {
-				$filter_fires++;
-				return $mode;
-			}
-		);
-
-		$this->controller()->handle(
+	public function test_no_rule_match_never_constructs_facilitator_services(): void {
+		$controller = $this->controller();
+		$controller->handle(
 			array(
 				'path'    => '/foo',
 				'method'  => 'GET',
@@ -365,28 +356,18 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame(
-			0,
-			$filter_fires,
-			'Rule miss must not trigger profile resolution (no mode filter firing).'
-		);
+		$this->assertNull( $this->private_field( $controller, 'profile' ) );
+		$this->assertNull( $this->private_field( $controller, 'builder' ) );
+		$this->assertNull( $this->private_field( $controller, 'facilitator_svc' ) );
 	}
 
 	/**
-	 * Deep path (verify + settle + grant issue) should resolve the profile
-	 * exactly once — proof that the builder + facilitator share a cached
-	 * profile instance instead of each triggering their own resolution.
+	 * The full verify + settle path must populate every lazy field: profile,
+	 * builder, facilitator_svc. If any one stays null, the controller reached
+	 * deeper code paths without going through the memoized accessors — a
+	 * regression we want to catch.
 	 */
-	public function test_full_verify_and_settle_resolves_profile_exactly_once(): void {
-		$filter_fires = 0;
-		add_filter(
-			SettingsRepository::MODE_OVERRIDE_HOOK,
-			static function ( $mode ) use ( &$filter_fires ) {
-				$filter_fires++;
-				return $mode;
-			}
-		);
-
+	public function test_full_verify_and_settle_populates_all_lazy_fields(): void {
 		$payload = X402HeaderCodec::encode(
 			array( 'payload' => array( 'authorization' => array( 'from' => '0xwallet' ) ) )
 		);
@@ -399,7 +380,8 @@ final class PaywallControllerTest extends TestCase {
 			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xtx"}' ),
 		);
 
-		$this->controller()->handle(
+		$controller = $this->controller();
+		$controller->handle(
 			array(
 				'path'    => '/premium',
 				'method'  => 'GET',
@@ -408,10 +390,14 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame(
-			1,
-			$filter_fires,
-			'Builder + facilitator must share one profile resolution, not resolve twice.'
-		);
+		$this->assertNotNull( $this->private_field( $controller, 'profile' ) );
+		$this->assertNotNull( $this->private_field( $controller, 'builder' ) );
+		$this->assertNotNull( $this->private_field( $controller, 'facilitator_svc' ) );
+	}
+
+	private function private_field( object $obj, string $name ): mixed {
+		$prop = new \ReflectionProperty( $obj::class, $name );
+		$prop->setAccessible( true );
+		return $prop->getValue( $obj );
 	}
 }

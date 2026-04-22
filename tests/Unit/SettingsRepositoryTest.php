@@ -170,33 +170,6 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( '0xabc', $GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ]['test']['wallet_address'] );
 	}
 
-	public function test_mode_filter_overrides_stored_mode(): void {
-		// Filter is typically registered at plugin load, before the first read.
-		// Register before constructing the repo so the initial mode() resolution
-		// sees it (the resolved mode is memoized per instance).
-		add_filter( SettingsRepository::MODE_OVERRIDE_HOOK, fn() => 'test' );
-
-		$repo = new SettingsRepository();
-		$repo->save(
-			array(
-				'mode' => 'live',
-				'live' => array( 'wallet_address' => '0xLIVE', 'default_price' => '0.01' ),
-				'test' => array( 'wallet_address' => '0xTEST', 'default_price' => '0.0001' ),
-			)
-		);
-		$this->assertSame( 'test', $repo->mode() );
-		$this->assertSame( '0xTEST', $repo->wallet_address() );
-	}
-
-	public function test_mode_filter_ignored_when_returning_invalid_value(): void {
-		add_filter( SettingsRepository::MODE_OVERRIDE_HOOK, fn() => 'garbage' );
-
-		$repo = new SettingsRepository();
-		$repo->save( array( 'mode' => 'live' ) );
-
-		$this->assertSame( 'live', $repo->mode() );
-	}
-
 	public function test_facilitator_profile_reflects_live_overrides(): void {
 		$repo = new SettingsRepository();
 		$repo->save(
