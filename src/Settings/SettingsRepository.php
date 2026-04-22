@@ -55,7 +55,13 @@ final class SettingsRepository {
 	public const VALID_X402_MODES  = array( FacilitatorProfile::MODE_TEST, FacilitatorProfile::MODE_LIVE );
 	public const DEFAULT_X402_MODE = FacilitatorProfile::MODE_TEST;
 
-	public const MODE_FILTER = 'simple_x402_mode';
+	/**
+	 * Filter hook that lets a site override the stored mode at runtime.
+	 * Primary use case: staging `wp-config.php` forces 'test' regardless of
+	 * what's saved in the database, so a production option blob imported into
+	 * staging can't accidentally transact on mainnet.
+	 */
+	public const MODE_OVERRIDE_HOOK = 'simple_x402_mode';
 
 	/**
 	 * Memoized copy of the stored option blob. null = not yet loaded.
@@ -85,7 +91,7 @@ final class SettingsRepository {
 		if ( ! in_array( $mode, self::VALID_X402_MODES, true ) ) {
 			$mode = self::DEFAULT_X402_MODE;
 		}
-		$filtered          = (string) apply_filters( self::MODE_FILTER, $mode );
+		$filtered          = (string) apply_filters( self::MODE_OVERRIDE_HOOK, $mode );
 		$this->cached_mode = in_array( $filtered, self::VALID_X402_MODES, true ) ? $filtered : $mode;
 		return $this->cached_mode;
 	}

@@ -174,7 +174,7 @@ final class SettingsRepositoryTest extends TestCase {
 		// Filter is typically registered at plugin load, before the first read.
 		// Register before constructing the repo so the initial mode() resolution
 		// sees it (the resolved mode is memoized per instance).
-		add_filter( SettingsRepository::MODE_FILTER, fn() => 'test' );
+		add_filter( SettingsRepository::MODE_OVERRIDE_HOOK, fn() => 'test' );
 
 		$repo = new SettingsRepository();
 		$repo->save(
@@ -189,7 +189,7 @@ final class SettingsRepositoryTest extends TestCase {
 	}
 
 	public function test_mode_filter_ignored_when_returning_invalid_value(): void {
-		add_filter( SettingsRepository::MODE_FILTER, fn() => 'garbage' );
+		add_filter( SettingsRepository::MODE_OVERRIDE_HOOK, fn() => 'garbage' );
 
 		$repo = new SettingsRepository();
 		$repo->save( array( 'mode' => 'live' ) );
