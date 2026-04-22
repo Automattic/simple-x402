@@ -64,15 +64,9 @@ final class SettingsRepository {
 	public const MODE_OVERRIDE_HOOK = 'simple_x402_mode';
 
 	/**
-	 * Memoized copy of the stored option blob. null = not yet loaded.
-	 * Invalidated by `invalidate_cache()` after any write through this class.
-	 *
-	 * @var array<string,mixed>|null
-	 */
-	private ?array $cached_stored = null;
-
-	/**
 	 * Memoized resolved mode (filter-applied). null = not yet computed.
+	 * Only the mode is cached — raw option reads rely on WordPress's own
+	 * in-memory options cache rather than an instance-level blob cache.
 	 */
 	private ?string $cached_mode = null;
 
@@ -87,7 +81,8 @@ final class SettingsRepository {
 		if ( null !== $this->cached_mode ) {
 			return $this->cached_mode;
 		}
-		$mode = (string) ( $this->stored()['mode'] ?? '' );
+		$stored = get_option( self::OPTION_NAME, array() );
+		$mode   = is_array( $stored ) ? (string) ( $stored['mode'] ?? '' ) : '';
 		if ( ! in_array( $mode, self::VALID_X402_MODES, true ) ) {
 			$mode = self::DEFAULT_X402_MODE;
 		}
@@ -139,17 +134,20 @@ final class SettingsRepository {
 	}
 
 	public function paywall_mode(): string {
-		$mode = (string) ( $this->stored()['paywall_mode'] ?? '' );
+		$stored = get_option( self::OPTION_NAME, array() );
+		$mode   = is_array( $stored ) ? (string) ( $stored['paywall_mode'] ?? '' ) : '';
 		return in_array( $mode, self::VALID_PAYWALL_MODES, true ) ? $mode : self::DEFAULT_PAYWALL_MODE;
 	}
 
 	public function paywall_audience(): string {
-		$audience = (string) ( $this->stored()['paywall_audience'] ?? '' );
+		$stored   = get_option( self::OPTION_NAME, array() );
+		$audience = is_array( $stored ) ? (string) ( $stored['paywall_audience'] ?? '' ) : '';
 		return in_array( $audience, self::VALID_AUDIENCES, true ) ? $audience : self::DEFAULT_AUDIENCE;
 	}
 
 	public function paywall_category_term_id(): int {
-		return (int) ( $this->stored()['paywall_category_term_id'] ?? 0 );
+		$stored = get_option( self::OPTION_NAME, array() );
+		return is_array( $stored ) ? (int) ( $stored['paywall_category_term_id'] ?? 0 ) : 0;
 	}
 
 	/**
@@ -208,7 +206,9 @@ final class SettingsRepository {
 	 */
 	public function save( array $input ): void {
 		update_option( self::OPTION_NAME, $this->sanitize( $input ) );
-		$this->invalidate_cache();
+		// Save may have changed the stored mode; drop the memoized value so the
+		// next mode() call re-resolves (and re-applies the override filter).
+		$this->cached_mode = null;
 	}
 
 	/**
@@ -218,34 +218,10 @@ final class SettingsRepository {
 	 * event (e.g. the delete-term guard) must not wipe unknown fields.
 	 */
 	public function set_paywall_category_term_id( int $term_id ): void {
-		$stored                             = $this->stored();
+		$stored                             = get_option( self::OPTION_NAME, array() );
+		$stored                             = is_array( $stored ) ? $stored : array();
 		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
-		$this->invalidate_cache();
-	}
-
-	/**
-	 * Clear memoized state. Call after any write so subsequent reads see the
-	 * fresh option. Public so external code that writes the option directly
-	 * (bypassing `save()` / `set_paywall_category_term_id()`) can still
-	 * resync a long-lived instance.
-	 */
-	public function invalidate_cache(): void {
-		$this->cached_stored = null;
-		$this->cached_mode   = null;
-	}
-
-	/**
-	 * Fetch the full stored option, loading once per instance.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private function stored(): array {
-		if ( null === $this->cached_stored ) {
-			$raw                 = get_option( self::OPTION_NAME, array() );
-			$this->cached_stored = is_array( $raw ) ? $raw : array();
-		}
-		return $this->cached_stored;
 	}
 
 	/**
@@ -262,7 +238,11 @@ final class SettingsRepository {
 	 * @return array<string,mixed>
 	 */
 	private function mode_block( string $mode ): array {
-		$block = $this->stored()[ $mode ] ?? array();
+		$stored = get_option( self::OPTION_NAME, array() );
+		if ( ! is_array( $stored ) ) {
+			return array();
+		}
+		$block = $stored[ $mode ] ?? array();
 		return is_array( $block ) ? $block : array();
 	}
 
