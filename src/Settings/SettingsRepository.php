@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace SimpleX402\Settings;
 
 use SimpleX402\Services\FacilitatorProfile;
+use SimpleX402\Services\SettingsChangeNotifier;
 
 /**
  * Thin wrapper around a single wp_options row.
@@ -58,6 +59,15 @@ final class SettingsRepository {
 
 	public const VALID_X402_MODES  = array( FacilitatorProfile::MODE_TEST, FacilitatorProfile::MODE_LIVE );
 	public const DEFAULT_X402_MODE = FacilitatorProfile::MODE_TEST;
+
+	private const WALLET_ADDRESS_PATTERN = '/^0x[0-9a-fA-F]{40}$/';
+
+	/**
+	 * @param SettingsChangeNotifier|null $notifier Receives notices when sanitize
+	 * has to revert a requested live-mode switch. Optional so callers that only
+	 * read the option (activation, plain getters) don't need the wiring.
+	 */
+	public function __construct( private readonly ?SettingsChangeNotifier $notifier = null ) {}
 
 	/**
 	 * Active x402 mode: 'test' or 'live'.
@@ -143,6 +153,21 @@ final class SettingsRepository {
 			? $input[ FacilitatorProfile::MODE_LIVE ]
 			: array();
 
+		$test_block = $this->sanitize_test_block( $test_raw );
+		$live_block = $this->sanitize_live_block( $live_raw );
+
+		// Live mode requires a routable destination wallet AND a facilitator
+		// API key — without either, every settle request silently fails. Refuse
+		// the switch (drop back to test) and surface a notice so the admin
+		// understands why the radio appears to have ignored them.
+		if ( FacilitatorProfile::MODE_LIVE === $mode ) {
+			$missing = $this->live_mode_issues( $live_block );
+			if ( array() !== $missing ) {
+				$mode = FacilitatorProfile::MODE_TEST;
+				$this->notifier?->notify_live_mode_incomplete( $missing );
+			}
+		}
+
 		$paywall_mode = isset( $input['paywall_mode'] ) ? (string) $input['paywall_mode'] : '';
 		if ( ! in_array( $paywall_mode, self::VALID_PAYWALL_MODES, true ) ) {
 			$paywall_mode = self::DEFAULT_PAYWALL_MODE;
@@ -160,12 +185,30 @@ final class SettingsRepository {
 
 		return array(
 			'mode'                        => $mode,
-			FacilitatorProfile::MODE_TEST => $this->sanitize_test_block( $test_raw ),
-			FacilitatorProfile::MODE_LIVE => $this->sanitize_live_block( $live_raw ),
+			FacilitatorProfile::MODE_TEST => $test_block,
+			FacilitatorProfile::MODE_LIVE => $live_block,
 			'paywall_mode'                => $paywall_mode,
 			'paywall_audience'            => $audience,
 			'paywall_category_term_id'    => $term_id,
 		);
+	}
+
+	/**
+	 * @param array<string,string> $live_block Sanitized live block.
+	 * @return string[] Human-readable phrases for each missing requirement.
+	 */
+	private function live_mode_issues( array $live_block ): array {
+		$issues = array();
+		$wallet = $live_block['wallet_address'] ?? '';
+		if ( '' === $wallet ) {
+			$issues[] = __( 'a receiving wallet address', 'simple-x402' );
+		} elseif ( 1 !== preg_match( self::WALLET_ADDRESS_PATTERN, $wallet ) ) {
+			$issues[] = __( 'a valid wallet address (0x followed by 40 hex characters)', 'simple-x402' );
+		}
+		if ( '' === ( $live_block['facilitator_api_key'] ?? '' ) ) {
+			$issues[] = __( 'a facilitator API key', 'simple-x402' );
+		}
+		return $issues;
 	}
 
 	/**
