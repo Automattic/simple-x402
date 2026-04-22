@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402\Http;
 
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\RuleResolver;
@@ -28,13 +29,33 @@ final class PaywallController {
 
 	public const BYPASS_HOOK = 'simple_x402_bypass_paywall';
 
+	/**
+	 * Lazily-resolved facilitator profile + the two services that depend on it.
+	 * Deferred so admin / AJAX / cron / REST requests that never reach the
+	 * paywall path don't pay for profile resolution (one filter firing + a
+	 * `get_option` pair for live mode).
+	 */
+	private ?FacilitatorProfile $profile            = null;
+	private ?PaymentRequirementsBuilder $builder    = null;
+	private ?X402FacilitatorClient $facilitator_svc = null;
+
 	public function __construct(
 		private readonly RuleResolver $rules,
-		private readonly PaymentRequirementsBuilder $builder,
-		private readonly X402FacilitatorClient $facilitator,
 		private readonly GrantStore $grants,
 		private readonly SettingsRepository $settings
 	) {}
+
+	private function profile(): FacilitatorProfile {
+		return $this->profile ??= $this->settings->facilitator_profile();
+	}
+
+	private function builder(): PaymentRequirementsBuilder {
+		return $this->builder ??= new PaymentRequirementsBuilder( $this->profile() );
+	}
+
+	private function facilitator(): X402FacilitatorClient {
+		return $this->facilitator_svc ??= new X402FacilitatorClient( $this->profile() );
+	}
 
 	/**
 	 * @param array{path:string,method:string,post_id:int,singular?:bool,headers:array<string,string>} $request Request details.
@@ -65,7 +86,7 @@ final class PaywallController {
 			return;
 		}
 
-		$requirements = $this->builder->build(
+		$requirements = $this->builder()->build(
 			$this->settings->wallet_address(),
 			$rule['price'],
 			home_url( $request['path'] ),
@@ -84,7 +105,7 @@ final class PaywallController {
 			return;
 		}
 
-		$verify = $this->facilitator->verify( $requirements, $payload );
+		$verify = $this->facilitator()->verify( $requirements, $payload );
 		if ( ! $verify['isValid'] ) {
 			$this->respond_402(
 				$requirements,
@@ -97,7 +118,7 @@ final class PaywallController {
 			return;
 		}
 
-		$settle = $this->facilitator->settle( $requirements, $payload );
+		$settle = $this->facilitator()->settle( $requirements, $payload );
 		if ( ! $settle['success'] ) {
 			$this->respond_402(
 				$requirements,

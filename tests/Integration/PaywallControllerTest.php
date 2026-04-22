@@ -5,11 +5,8 @@ namespace SimpleX402\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Http\PaywallController;
-use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
-use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\RuleResolver;
-use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Services\X402HeaderCodec;
 use SimpleX402\Settings\SettingsRepository;
 
@@ -40,11 +37,8 @@ final class PaywallControllerTest extends TestCase {
 	}
 
 	private function controller(): PaywallController {
-		$profile = FacilitatorProfile::for_test();
 		return new PaywallController(
 			new RuleResolver(),
-			new PaymentRequirementsBuilder( $profile ),
-			new X402FacilitatorClient( $profile ),
 			new GrantStore(),
 			new SettingsRepository()
 		);
@@ -340,5 +334,84 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertIsArray( $body );
 		$this->assertSame( 'settle_failed', $body['error'] );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	/**
+	 * Regression guard for the lazy-profile refactor: a request that matches
+	 * no paywall rule must not resolve the FacilitatorProfile. The cheap proxy
+	 * for "profile was resolved" is whether the `simple_x402_mode` filter fired
+	 * (SettingsRepository::mode() is the only path that triggers it, and
+	 * facilitator_profile() calls mode() internally).
+	 *
+	 * Without this guard, every admin dashboard hit, AJAX poll, REST call, and
+	 * cron tick pays for a filter firing + get_option it never needs.
+	 */
+	public function test_no_rule_match_does_not_resolve_facilitator_profile(): void {
+		$filter_fires = 0;
+		add_filter(
+			SettingsRepository::MODE_OVERRIDE_HOOK,
+			static function ( $mode ) use ( &$filter_fires ) {
+				$filter_fires++;
+				return $mode;
+			}
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame(
+			0,
+			$filter_fires,
+			'Rule miss must not trigger profile resolution (no mode filter firing).'
+		);
+	}
+
+	/**
+	 * Deep path (verify + settle + grant issue) should resolve the profile
+	 * exactly once — proof that the builder + facilitator share a cached
+	 * profile instance instead of each triggering their own resolution.
+	 */
+	public function test_full_verify_and_settle_resolves_profile_exactly_once(): void {
+		$filter_fires = 0;
+		add_filter(
+			SettingsRepository::MODE_OVERRIDE_HOOK,
+			static function ( $mode ) use ( &$filter_fires ) {
+				$filter_fires++;
+				return $mode;
+			}
+		);
+
+		$payload = X402HeaderCodec::encode(
+			array( 'payload' => array( 'authorization' => array( 'from' => '0xwallet' ) ) )
+		);
+		add_filter(
+			'simple_x402_rule_for_request',
+			static fn() => array( 'price' => '0.01', 'ttl' => 60, 'description' => 'Test' )
+		);
+		$GLOBALS['__sx402_http_queue'] = array(
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xtx"}' ),
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/premium',
+				'method'  => 'GET',
+				'post_id' => 1,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		$this->assertSame(
+			1,
+			$filter_fires,
+			'Builder + facilitator must share one profile resolution, not resolve twice.'
+		);
 	}
 }

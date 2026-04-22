@@ -17,11 +17,9 @@ use SimpleX402\Services\BotDetector;
 use SimpleX402\Services\CategoryRepository;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\GrantStore;
-use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\PaywallCategoryGuard;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\SettingsChangeNotifier;
-use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
@@ -38,12 +36,9 @@ final class Plugin {
 	 */
 	public static function boot(): void {
 		$settings     = new SettingsRepository();
-		$profile      = $settings->facilitator_profile();
 		$rules        = new RuleResolver();
 		$controller   = new PaywallController(
 			$rules,
-			new PaymentRequirementsBuilder( $profile ),
-			new X402FacilitatorClient( $profile ),
 			new GrantStore(),
 			$settings
 		);
