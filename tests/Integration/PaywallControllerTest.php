@@ -6,9 +6,7 @@ namespace SimpleX402\Tests\Integration;
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\GrantStore;
-use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\RuleResolver;
-use SimpleX402\Services\X402FacilitatorClient;
 use SimpleX402\Services\X402HeaderCodec;
 use SimpleX402\Settings\SettingsRepository;
 
@@ -19,8 +17,11 @@ final class PaywallControllerTest extends TestCase {
 		$GLOBALS['__sx402_transients'] = array();
 		$GLOBALS['__sx402_options']    = array(
 			'simple_x402_settings' => array(
-				'wallet_address' => '0xreceiver',
-				'default_price'  => '0.01',
+				'mode' => 'test',
+				'test' => array(
+					'wallet_address' => '0xreceiver',
+					'default_price'  => '0.01',
+				),
 			),
 		);
 		$GLOBALS['__sx402_response']   = array(
@@ -35,13 +36,11 @@ final class PaywallControllerTest extends TestCase {
 		$GLOBALS['__sx402_current_user_caps'] = array();
 	}
 
-	private function controller(): PaywallController {
+	private function controller( ?SettingsRepository $settings = null ): PaywallController {
 		return new PaywallController(
 			new RuleResolver(),
-			new PaymentRequirementsBuilder(),
-			new X402FacilitatorClient(),
 			new GrantStore(),
-			new SettingsRepository()
+			$settings ?? new SettingsRepository()
 		);
 	}
 
@@ -335,5 +334,70 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertIsArray( $body );
 		$this->assertSame( 'settle_failed', $body['error'] );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	/**
+	 * Regression guard for the lazy-profile refactor: a request that matches
+	 * no paywall rule must never touch the facilitator layer. Without this
+	 * guard, every admin dashboard hit, AJAX poll, REST call, and cron tick
+	 * would pay for profile resolution + service construction it never needs.
+	 *
+	 * We assert it via reflection on the private fields — they're null iff
+	 * the lazy accessors were never invoked.
+	 */
+	public function test_no_rule_match_never_constructs_facilitator_services(): void {
+		$controller = $this->controller();
+		$controller->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertNull( $this->private_field( $controller, 'profile' ) );
+		$this->assertNull( $this->private_field( $controller, 'builder' ) );
+		$this->assertNull( $this->private_field( $controller, 'facilitator_svc' ) );
+	}
+
+	/**
+	 * The full verify + settle path must populate every lazy field: profile,
+	 * builder, facilitator_svc. If any one stays null, the controller reached
+	 * deeper code paths without going through the memoized accessors — a
+	 * regression we want to catch.
+	 */
+	public function test_full_verify_and_settle_populates_all_lazy_fields(): void {
+		$payload = X402HeaderCodec::encode(
+			array( 'payload' => array( 'authorization' => array( 'from' => '0xwallet' ) ) )
+		);
+		add_filter(
+			'simple_x402_rule_for_request',
+			static fn() => array( 'price' => '0.01', 'ttl' => 60, 'description' => 'Test' )
+		);
+		$GLOBALS['__sx402_http_queue'] = array(
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xtx"}' ),
+		);
+
+		$controller = $this->controller();
+		$controller->handle(
+			array(
+				'path'    => '/premium',
+				'method'  => 'GET',
+				'post_id' => 1,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		$this->assertNotNull( $this->private_field( $controller, 'profile' ) );
+		$this->assertNotNull( $this->private_field( $controller, 'builder' ) );
+		$this->assertNotNull( $this->private_field( $controller, 'facilitator_svc' ) );
+	}
+
+	private function private_field( object $obj, string $name ): mixed {
+		$prop = new \ReflectionProperty( $obj::class, $name );
+		$prop->setAccessible( true );
+		return $prop->getValue( $obj );
 	}
 }

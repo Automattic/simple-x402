@@ -1,6 +1,6 @@
 <?php
 /**
- * HTTP client for the public x402.org facilitator.
+ * HTTP client for an x402 facilitator.
  *
  * @package SimpleX402
  */
@@ -10,16 +10,19 @@ declare(strict_types=1);
 namespace SimpleX402\Services;
 
 /**
- * Posts PaymentRequirements + PaymentPayload bodies to the x402.org
- * facilitator's /verify and /settle endpoints using wp_remote_post.
+ * Posts PaymentRequirements + PaymentPayload bodies to a facilitator's
+ * /verify and /settle endpoints using wp_remote_post.
  *
- * No auth, no transport customisation — x402.org is a public, unauthenticated
- * facilitator on Base Sepolia.
+ * Endpoint URL and optional bearer authorization come from the injected
+ * FacilitatorProfile. The public x402.org facilitator is used in test mode
+ * (no auth); live mode typically targets a commercial facilitator (e.g.
+ * Coinbase CDP) that requires an API key.
  */
 final class X402FacilitatorClient {
 
-	private const BASE_URL = 'https://x402.org/facilitator/';
-	private const TIMEOUT  = 25;
+	private const TIMEOUT = 25;
+
+	public function __construct( private readonly FacilitatorProfile $profile ) {}
 
 	/**
 	 * Verify a payment payload against requirements.
@@ -78,14 +81,20 @@ final class X402FacilitatorClient {
 	 * @return array{body:array,error:?string}
 	 */
 	private function post( string $endpoint, array $body ): array {
-		$raw = wp_remote_post(
-			self::BASE_URL . ltrim( $endpoint, '/' ),
+		$headers = array(
+			'Content-Type' => 'application/json',
+			'Accept'       => 'application/json',
+		);
+		if ( '' !== $this->profile->api_key ) {
+			$headers['Authorization'] = 'Bearer ' . $this->profile->api_key;
+		}
+
+		$base = rtrim( $this->profile->facilitator_url, '/' ) . '/';
+		$raw  = wp_remote_post(
+			$base . ltrim( $endpoint, '/' ),
 			array(
 				'timeout' => self::TIMEOUT,
-				'headers' => array(
-					'Content-Type' => 'application/json',
-					'Accept'       => 'application/json',
-				),
+				'headers' => $headers,
 				'body'    => wp_json_encode( $body ),
 			)
 		);

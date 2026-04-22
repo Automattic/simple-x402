@@ -9,18 +9,18 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
  * Settings → Simple x402 admin page.
  *
- * Three sections:
+ * Sections:
+ *  - Mode (test / live) + mode banner.
  *  - What to paywall: mode (category / all-posts) and the paywall category name.
  *  - Who to paywall: audience (everyone / bots / none).
- *  - Where to send the funds: receiving wallet, price per request.
- *
- * Registered as an options page under Settings rather than its own top-level
- * menu; the Settings API handles persistence.
+ *  - Where to send the funds: per-mode wallet + price, and live-only
+ *    facilitator URL + API key.
  */
 final class SettingsPage {
 
@@ -41,10 +41,6 @@ final class SettingsPage {
 
 	/**
 	 * Register admin JS for this page only.
-	 *
-	 * Hook suffix for a submenu added via `add_options_page` follows the
-	 * `settings_page_{slug}` convention — we guard on it so the script is not
-	 * loaded site-wide in the admin.
 	 */
 	public function enqueue_assets( string $hook_suffix ): void {
 		if ( 'settings_page_' . self::MENU_SLUG !== $hook_suffix ) {
@@ -62,7 +58,7 @@ final class SettingsPage {
 			'simpleX402Settings',
 			array(
 				'option'       => SettingsRepository::OPTION_NAME,
-				'modeCategory' => SettingsRepository::MODE_CATEGORY,
+				'modeCategory' => SettingsRepository::PAYWALL_MODE_CATEGORY,
 			)
 		);
 	}
@@ -88,8 +84,6 @@ final class SettingsPage {
 			self::GROUP,
 			SettingsRepository::OPTION_NAME,
 			array(
-				// Must be pure: WP calls this from inside update_option, so
-				// persisting here (e.g. via SettingsRepository::save) recurses.
 				'sanitize_callback' => fn ( $input ): array => $this->settings->sanitize(
 					is_array( $input ) ? $input : array()
 				),
@@ -104,19 +98,25 @@ final class SettingsPage {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$wallet   = $this->settings->wallet_address();
-		$price    = $this->settings->default_price();
-		$mode     = $this->settings->paywall_mode();
-		$audience = $this->settings->paywall_audience();
-		$term_id  = $this->settings->paywall_category_term_id();
-		$option   = SettingsRepository::OPTION_NAME;
+		$mode         = $this->settings->mode();
+		$paywall_mode = $this->settings->paywall_mode();
+		$audience     = $this->settings->paywall_audience();
+		$term_id      = $this->settings->paywall_category_term_id();
+		$test_profile = FacilitatorProfile::for_test();
+		$live_profile = FacilitatorProfile::for_live();
+		$option       = SettingsRepository::OPTION_NAME;
+		$test_prefix  = $option . '[' . FacilitatorProfile::MODE_TEST . ']';
+		$live_prefix  = $option . '[' . FacilitatorProfile::MODE_LIVE . ']';
+		$stored       = get_option( SettingsRepository::OPTION_NAME, array() );
+		$stored       = is_array( $stored ) ? $stored : array();
+		$test_block   = is_array( $stored[ FacilitatorProfile::MODE_TEST ] ?? null ) ? $stored[ FacilitatorProfile::MODE_TEST ] : array();
+		$live_block   = is_array( $stored[ FacilitatorProfile::MODE_LIVE ] ?? null ) ? $stored[ FacilitatorProfile::MODE_LIVE ] : array();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
 			<form method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
 
-				<h2><?php esc_html_e( 'What to paywall', 'simple-x402' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row">
@@ -128,8 +128,8 @@ final class SettingsPage {
 									<input
 										type="radio"
 										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
-										value="<?php echo esc_attr( SettingsRepository::MODE_ALL_POSTS ); ?>"
-										<?php checked( $mode, SettingsRepository::MODE_ALL_POSTS ); ?>
+										value="<?php echo esc_attr( SettingsRepository::PAYWALL_MODE_ALL_POSTS ); ?>"
+										<?php checked( $paywall_mode, SettingsRepository::PAYWALL_MODE_ALL_POSTS ); ?>
 									/>
 									<?php esc_html_e( 'Every published post', 'simple-x402' ); ?>
 								</label><br />
@@ -137,27 +137,27 @@ final class SettingsPage {
 									<input
 										type="radio"
 										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
-										value="<?php echo esc_attr( SettingsRepository::MODE_CATEGORY ); ?>"
-										<?php checked( $mode, SettingsRepository::MODE_CATEGORY ); ?>
+										value="<?php echo esc_attr( SettingsRepository::PAYWALL_MODE_CATEGORY ); ?>"
+										<?php checked( $paywall_mode, SettingsRepository::PAYWALL_MODE_CATEGORY ); ?>
 									/>
 									<?php esc_html_e( 'Only posts in a specific category:', 'simple-x402' ); ?>
 								</label>
 								<fieldset
 									id="sx402-category-wrap"
 									style="border:0; padding:0; margin: 6px 0 0 24px;"
-									<?php disabled( $mode, SettingsRepository::MODE_ALL_POSTS ); ?>
+									<?php disabled( $paywall_mode, SettingsRepository::PAYWALL_MODE_ALL_POSTS ); ?>
 								>
 									<?php
 									echo (string) wp_dropdown_categories( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- generated by wp_dropdown_categories.
 										array(
-											'name'             => $option . '[paywall_category_term_id]',
-											'id'               => 'sx402-category',
-											'taxonomy'         => 'category',
-											'hide_empty'       => false,
+											'name'         => $option . '[paywall_category_term_id]',
+											'id'           => 'sx402-category',
+											'taxonomy'     => 'category',
+											'hide_empty'   => false,
 											'show_option_none' => false,
-											'selected'         => $term_id,
-											'hierarchical'     => true,
-											'echo'             => 0,
+											'selected'     => $term_id,
+											'hierarchical' => true,
+											'echo'         => 0,
 										)
 									);
 									?>
@@ -167,7 +167,6 @@ final class SettingsPage {
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Who to paywall', 'simple-x402' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row">
@@ -207,44 +206,131 @@ final class SettingsPage {
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Where to send the funds', 'simple-x402' ); ?></h2>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="sx402-wallet">
-								<?php esc_html_e( 'Receiving wallet', 'simple-x402' ); ?>
+				<h2><?php esc_html_e( 'Payment details', 'simple-x402' ); ?></h2>
+
+					<div class="sx402-field">
+						<span class="sx402-field-label"><?php esc_html_e( 'Mode', 'simple-x402' ); ?></span>
+						<fieldset>
+							<label>
+								<input
+									type="radio"
+									name="<?php echo esc_attr( $option ); ?>[mode]"
+									value="<?php echo esc_attr( FacilitatorProfile::MODE_TEST ); ?>"
+									<?php checked( $mode, FacilitatorProfile::MODE_TEST ); ?>
+								/>
+								<?php echo esc_html( $test_profile->label ); ?>
 							</label>
-						</th>
-						<td>
-							<input
-								name="<?php echo esc_attr( $option ); ?>[wallet_address]"
-								id="sx402-wallet"
-								type="text"
-								class="regular-text"
-								value="<?php echo esc_attr( $wallet ); ?>"
-							/>
-							<p class="description">
-								<?php esc_html_e( 'USDC is sent to this address on Base Sepolia.', 'simple-x402' ); ?>
-							</p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<label for="sx402-price">
-								<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
+							<label style="margin-left:12px;">
+								<input
+									type="radio"
+									name="<?php echo esc_attr( $option ); ?>[mode]"
+									value="<?php echo esc_attr( FacilitatorProfile::MODE_LIVE ); ?>"
+									<?php checked( $mode, FacilitatorProfile::MODE_LIVE ); ?>
+								/>
+								<?php echo esc_html( $live_profile->label ); ?>
 							</label>
-						</th>
-						<td>
-							<input
-								name="<?php echo esc_attr( $option ); ?>[default_price]"
-								id="sx402-price"
-								type="text"
-								class="small-text"
-								value="<?php echo esc_attr( $price ); ?>"
-							/>
-						</td>
-					</tr>
-				</table>
+						</fieldset>
+					</div>
+
+					<div class="sx402-mode-columns" style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
+						<div style="flex:1 1 320px; min-width:0;">
+							<h3><?php esc_html_e( 'Test settings', 'simple-x402' ); ?></h3>
+
+							<div class="sx402-field">
+								<label for="sx402-test-wallet" class="sx402-field-label">
+									<?php esc_html_e( 'Receiving wallet (Base Sepolia)', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $test_prefix . '[wallet_address]' ); ?>"
+									id="sx402-test-wallet"
+									type="text"
+									class="regular-text"
+									value="<?php echo esc_attr( (string) ( $test_block['wallet_address'] ?? '' ) ); ?>"
+								/>
+							</div>
+
+							<div class="sx402-field">
+								<label for="sx402-test-price" class="sx402-field-label">
+									<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $test_prefix . '[default_price]' ); ?>"
+									id="sx402-test-price"
+									type="text"
+									class="big-text"
+									value="<?php echo esc_attr( (string) ( $test_block['default_price'] ?? '' ) ); ?>"
+								/>
+							</div>
+						</div>
+
+						<div style="flex:1 1 320px; min-width:0;">
+							<h3><?php esc_html_e( 'Live settings', 'simple-x402' ); ?></h3>
+
+							<div class="sx402-field">
+								<label for="sx402-live-wallet" class="sx402-field-label">
+									<?php esc_html_e( 'Receiving wallet (Base mainnet)', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $live_prefix . '[wallet_address]' ); ?>"
+									id="sx402-live-wallet"
+									type="text"
+									class="regular-text"
+									value="<?php echo esc_attr( (string) ( $live_block['wallet_address'] ?? '' ) ); ?>"
+								/>
+							</div>
+
+							<div class="sx402-field">
+								<label for="sx402-live-price" class="sx402-field-label">
+									<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $live_prefix . '[default_price]' ); ?>"
+									id="sx402-live-price"
+									type="text"
+									class="big-text"
+									value="<?php echo esc_attr( (string) ( $live_block['default_price'] ?? '' ) ); ?>"
+								/>
+							</div>
+
+							<div class="sx402-field">
+								<label for="sx402-live-facilitator-url" class="sx402-field-label">
+									<?php esc_html_e( 'Facilitator URL', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $live_prefix . '[facilitator_url]' ); ?>"
+									id="sx402-live-facilitator-url"
+									type="text"
+									class="regular-text"
+									value="<?php echo esc_attr( (string) ( $live_block['facilitator_url'] ?? '' ) ); ?>"
+									placeholder="<?php echo esc_attr( FacilitatorProfile::LIVE_FACILITATOR_URL_DEFAULT ); ?>"
+								/>
+								<p class="description">
+									<?php esc_html_e( 'Leave blank to use the Coinbase CDP default.', 'simple-x402' ); ?>
+								</p>
+							</div>
+
+							<div class="sx402-field">
+								<label for="sx402-live-facilitator-key" class="sx402-field-label">
+									<?php esc_html_e( 'Facilitator API key', 'simple-x402' ); ?>
+								</label>
+								<input
+									name="<?php echo esc_attr( $live_prefix . '[facilitator_api_key]' ); ?>"
+									id="sx402-live-facilitator-key"
+									type="password"
+									class="regular-text"
+									value="<?php echo esc_attr( (string) ( $live_block['facilitator_api_key'] ?? '' ) ); ?>"
+									autocomplete="new-password"
+								/>
+							</div>
+						</div>
+					</div>
+
+				<style>
+					.sx402-field { margin: 0 0 14px; }
+					.sx402-field-label { display: block; font-weight: 600; margin-bottom: 4px; }
+					.sx402-field .regular-text { width: 100%; max-width: 400px; }
+				</style>
+
 				<?php submit_button(); ?>
 			</form>
 		</div>

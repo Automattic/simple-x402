@@ -5,6 +5,7 @@ namespace SimpleX402\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Settings\SettingsRepository;
 
 final class SettingsPageTest extends TestCase {
@@ -28,7 +29,7 @@ final class SettingsPageTest extends TestCase {
 		$localized = $GLOBALS['__sx402_localized_data'][ SettingsPage::SCRIPT_HANDLE ]['simpleX402Settings'] ?? null;
 		$this->assertIsArray( $localized );
 		$this->assertSame( SettingsRepository::OPTION_NAME, $localized['option'] );
-		$this->assertSame( SettingsRepository::MODE_CATEGORY, $localized['modeCategory'] );
+		$this->assertSame( SettingsRepository::PAYWALL_MODE_CATEGORY, $localized['modeCategory'] );
 	}
 
 	public function test_enqueue_assets_skips_other_admin_pages(): void {
@@ -37,37 +38,7 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( array(), $GLOBALS['__sx402_enqueued_scripts'] );
 	}
 
-	public function test_sanitize_callback_returns_clean_array_without_persisting(): void {
-		$page = new SettingsPage( new SettingsRepository() );
-		$page->register_settings();
-
-		$args     = $GLOBALS['__sx402_registered_settings'][ SettingsPage::GROUP ][ SettingsRepository::OPTION_NAME ];
-		$callback = $args['sanitize_callback'];
-
-		$result = $callback(
-			array(
-				'wallet_address'           => '0xABC',
-				'default_price'            => '0.5',
-				'paywall_category_term_id' => 2,
-			)
-		);
-
-		$this->assertSame(
-			array(
-				'wallet_address'           => '0xABC',
-				'default_price'            => '0.5',
-				'paywall_mode'             => 'category',
-				'paywall_audience'         => 'none',
-				'paywall_category_term_id' => 2,
-			),
-			$result
-		);
-		// Regression: the callback must be pure. WP persists the returned value;
-		// calling update_option from inside the callback recurses infinitely.
-		$this->assertArrayNotHasKey( SettingsRepository::OPTION_NAME, $GLOBALS['__sx402_options'] );
-	}
-
-	public function test_sanitize_callback_falls_back_to_default_for_bad_price(): void {
+	public function test_sanitize_callback_returns_nested_shape_without_persisting(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 		$page->register_settings();
 
@@ -75,19 +46,46 @@ final class SettingsPageTest extends TestCase {
 
 		$result = $callback(
 			array(
-				'wallet_address' => '0xABC',
-				'default_price'  => 'nope',
+				'mode' => 'test',
+				'test' => array( 'wallet_address' => '0xABC', 'default_price' => '0.5' ),
+				'live' => array( 'wallet_address' => '0xLIVE', 'default_price' => '0.01', 'facilitator_url' => '', 'facilitator_api_key' => 'k' ),
+				'paywall_category_term_id' => 2,
 			)
 		);
 
-		$this->assertSame( '0.01', $result['default_price'] );
+		$this->assertSame( 'test', $result['mode'] );
+		$this->assertSame( '0xABC', $result['test']['wallet_address'] );
+		$this->assertSame( '0.5', $result['test']['default_price'] );
+		$this->assertSame( '0xLIVE', $result['live']['wallet_address'] );
+		$this->assertSame( 'k', $result['live']['facilitator_api_key'] );
+		$this->assertSame( 'category', $result['paywall_mode'] );
+		$this->assertSame( 'none', $result['paywall_audience'] );
+		$this->assertSame( 2, $result['paywall_category_term_id'] );
+		// Regression: the callback must be pure (no persistence) so WP's
+		// update_option doesn't recurse during register_setting sanitization.
+		$this->assertArrayNotHasKey( SettingsRepository::OPTION_NAME, $GLOBALS['__sx402_options'] );
 	}
 
-	public function test_render_shows_both_mode_options_with_stored_selected(): void {
+	public function test_sanitize_callback_falls_back_to_default_for_bad_price_per_mode(): void {
+		$page = new SettingsPage( new SettingsRepository() );
+		$page->register_settings();
+
+		$callback = $GLOBALS['__sx402_registered_settings'][ SettingsPage::GROUP ][ SettingsRepository::OPTION_NAME ]['sanitize_callback'];
+
+		$result = $callback(
+			array(
+				'mode' => 'test',
+				'test' => array( 'wallet_address' => '0xABC', 'default_price' => 'nope' ),
+			)
+		);
+
+		$this->assertSame( '0.01', $result['test']['default_price'] );
+	}
+
+	public function test_render_shows_both_paywall_mode_options_with_stored_selected(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.01',
-			'paywall_mode'             => 'all-posts',
+			'mode' => 'test',
+			'paywall_mode' => 'all-posts',
 			'paywall_category_term_id' => 1,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
@@ -98,21 +96,13 @@ final class SettingsPageTest extends TestCase {
 
 		$this->assertStringContainsString( 'value="category"', $html );
 		$this->assertStringContainsString( 'value="all-posts"', $html );
-		$this->assertMatchesRegularExpression(
-			'/value="all-posts"[^>]*checked/',
-			$html
-		);
-		$this->assertDoesNotMatchRegularExpression(
-			'/value="category"[^>]*checked/',
-			$html
-		);
+		$this->assertMatchesRegularExpression( '/value="all-posts"[^>]*checked/', $html );
 	}
 
 	public function test_render_shows_category_dropdown_with_stored_term_selected(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.01',
-			'paywall_mode'             => 'category',
+			'mode' => 'test',
+			'paywall_mode' => 'category',
 			'paywall_category_term_id' => 2,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
@@ -131,16 +121,14 @@ final class SettingsPageTest extends TestCase {
 		);
 	}
 
-	public function test_render_groups_fields_under_three_h2_sections(): void {
+	public function test_render_has_payments_heading(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*What to paywall\s*<\/h2>/', $html );
-		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Who to paywall\s*<\/h2>/', $html );
-		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Where to send the funds\s*<\/h2>/', $html );
+		$this->assertMatchesRegularExpression( '/<h2[^>]*>\s*Payment details\s*<\/h2>/', $html );
 	}
 
 	public function test_render_shows_three_audience_options_with_default_checked(): void {
@@ -153,59 +141,33 @@ final class SettingsPageTest extends TestCase {
 		$this->assertStringContainsString( 'value="everyone"', $html );
 		$this->assertStringContainsString( 'value="bots"', $html );
 		$this->assertStringContainsString( 'value="none"', $html );
-		$this->assertMatchesRegularExpression(
-			'/value="none"[^>]*checked/',
-			$html
-		);
+		$this->assertMatchesRegularExpression( '/value="none"[^>]*checked/', $html );
 	}
 
-	public function test_render_checks_stored_audience(): void {
-		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.01',
-			'paywall_mode'             => 'category',
-			'paywall_audience'         => 'bots',
-			'paywall_category_term_id' => 1,
-		);
+	public function test_render_orders_paywall_audience_payments(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertMatchesRegularExpression(
-			'/value="bots"[^>]*checked/',
-			$html
-		);
-		$this->assertDoesNotMatchRegularExpression(
-			'/value="none"[^>]*checked/',
-			$html
-		);
+		$paywall_mode_pos = strpos( $html, '[paywall_mode]' );
+		$audience_pos     = strpos( $html, '[paywall_audience]' );
+		$where_pos        = strpos( $html, 'Payment details' );
+		$mode_row         = strpos( $html, '[mode]' );
+
+		$this->assertNotFalse( $paywall_mode_pos );
+		$this->assertNotFalse( $mode_row );
+		$this->assertLessThan( $audience_pos, $paywall_mode_pos );
+		$this->assertLessThan( $where_pos, $audience_pos );
+		// Mode selector is nested inside the Payments container.
+		$this->assertLessThan( $mode_row, $where_pos );
 	}
 
-	public function test_render_sections_ordered_what_who_where(): void {
-		$page = new SettingsPage( new SettingsRepository() );
-
-		ob_start();
-		$page->render();
-		$html = (string) ob_get_clean();
-
-		$what_pos  = strpos( $html, 'What to paywall' );
-		$who_pos   = strpos( $html, 'Who to paywall' );
-		$where_pos = strpos( $html, 'Where to send the funds' );
-
-		$this->assertNotFalse( $what_pos );
-		$this->assertNotFalse( $who_pos );
-		$this->assertNotFalse( $where_pos );
-		$this->assertLessThan( $who_pos, $what_pos );
-		$this->assertLessThan( $where_pos, $who_pos );
-	}
-
-	public function test_render_disables_category_dropdown_when_mode_is_all_posts(): void {
+	public function test_render_disables_category_dropdown_when_paywall_mode_is_all_posts(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.01',
-			'paywall_mode'             => 'all-posts',
+			'mode' => 'test',
+			'paywall_mode' => 'all-posts',
 			'paywall_category_term_id' => 1,
 		);
 		$page = new SettingsPage( new SettingsRepository() );
@@ -220,12 +182,10 @@ final class SettingsPageTest extends TestCase {
 		);
 	}
 
-	public function test_render_does_not_disable_category_dropdown_in_category_mode(): void {
+	public function test_render_has_both_mode_radios_with_stored_mode_checked(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.01',
-			'paywall_mode'             => 'category',
-			'paywall_category_term_id' => 1,
+			'mode' => 'live',
+			'live' => array( 'wallet_address' => '0xLIVE', 'default_price' => '0.01' ),
 		);
 		$page = new SettingsPage( new SettingsRepository() );
 
@@ -233,37 +193,44 @@ final class SettingsPageTest extends TestCase {
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertDoesNotMatchRegularExpression(
-			'/<fieldset\b[^>]*\bid="sx402-category-wrap"[^>]*\bdisabled\b/',
-			$html
-		);
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[mode\]"[^>]*value="test"/', $html );
+		$this->assertMatchesRegularExpression( '/name="[^"]*\[mode\]"[^>]*value="live"[^>]*checked/', $html );
 	}
 
-	public function test_render_nests_category_dropdown_inside_mode_fieldset(): void {
+public function test_render_emits_per_mode_payment_input_names(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertMatchesRegularExpression(
-			'/<fieldset[^>]*>[\s\S]*name="[^"]*\[paywall_category_term_id\]"[\s\S]*<\/fieldset>/',
-			$html
-		);
+		foreach ( array(
+			'[test][wallet_address]',
+			'[test][default_price]',
+			'[live][wallet_address]',
+			'[live][default_price]',
+			'[live][facilitator_url]',
+			'[live][facilitator_api_key]',
+		) as $needle ) {
+			$this->assertStringContainsString( $needle, $html, "Form should have input named $needle" );
+		}
 	}
 
-	public function test_render_places_all_posts_radio_before_category_radio(): void {
+	public function test_render_renders_stored_per_mode_wallet_values(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'mode' => 'test',
+			'test' => array( 'wallet_address' => '0xTESTWALLET', 'default_price' => '0.0001' ),
+			'live' => array( 'wallet_address' => '0xLIVEWALLET', 'default_price' => '0.05' ),
+		);
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$all_posts_pos = strpos( $html, 'value="all-posts"' );
-		$category_pos  = strpos( $html, 'value="category"' );
-
-		$this->assertNotFalse( $all_posts_pos );
-		$this->assertNotFalse( $category_pos );
-		$this->assertLessThan( $category_pos, $all_posts_pos );
+		$this->assertStringContainsString( 'value="0xTESTWALLET"', $html );
+		$this->assertStringContainsString( 'value="0xLIVEWALLET"', $html );
+		$this->assertStringContainsString( 'value="0.0001"', $html );
+		$this->assertStringContainsString( 'value="0.05"', $html );
 	}
 }

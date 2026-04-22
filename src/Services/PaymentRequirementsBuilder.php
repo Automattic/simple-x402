@@ -13,17 +13,15 @@ namespace SimpleX402\Services;
  * Assembles the `PaymentRequirements` array that goes into the
  * PAYMENT-REQUIRED response header and JSON body.
  *
- * Base Sepolia + USDC are hardcoded here; swapping networks is intentionally
- * a code change (MVP constraint).
+ * Network, asset, and EIP-712 domain come from the injected FacilitatorProfile,
+ * so the builder itself is agnostic to test vs live.
  */
 final class PaymentRequirementsBuilder {
 
-	private const NETWORK = 'eip155:84532';
-	// phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- EVM contract address literal, not a numeric string.
-	private const ASSET          = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-	private const ASSET_DECIMALS = 6;
-	private const SCHEME         = 'exact';
-	private const MAX_TIMEOUT    = 120;
+	private const SCHEME      = 'exact';
+	private const MAX_TIMEOUT = 120;
+
+	public function __construct( private readonly FacilitatorProfile $profile ) {}
 
 	/**
 	 * Build a PaymentRequirements array.
@@ -41,27 +39,31 @@ final class PaymentRequirementsBuilder {
 	): array {
 		return array(
 			'scheme'            => self::SCHEME,
-			'network'           => self::NETWORK,
-			'asset'             => self::ASSET,
+			'network'           => $this->profile->network,
+			'asset'             => $this->profile->asset,
 			'payTo'             => $pay_to,
 			'maxAmountRequired' => $this->to_base_units( $price ),
 			'resource'          => $resource_url,
 			'description'       => $description,
 			'mimeType'          => 'application/json',
 			'maxTimeoutSeconds' => self::MAX_TIMEOUT,
+			'extra'             => array(
+				'name'    => $this->profile->eip712_name,
+				'version' => $this->profile->eip712_version,
+			),
 		);
 	}
 
 	/**
-	 * Convert a decimal string amount into base units (atomic USDC units).
+	 * Convert a decimal string amount into base units (atomic token units).
 	 */
 	private function to_base_units( string $decimal ): string {
 		if ( ! is_numeric( $decimal ) || (float) $decimal <= 0 ) {
 			return '0';
 		}
 		[ $whole, $frac ] = array_pad( explode( '.', $decimal, 2 ), 2, '' );
-		$frac             = substr( $frac, 0, self::ASSET_DECIMALS );
-		$frac             = str_pad( $frac, self::ASSET_DECIMALS, '0' );
+		$frac             = substr( $frac, 0, $this->profile->asset_decimals );
+		$frac             = str_pad( $frac, $this->profile->asset_decimals, '0' );
 		$combined         = ltrim( $whole . $frac, '0' );
 		return '' === $combined ? '0' : $combined;
 	}

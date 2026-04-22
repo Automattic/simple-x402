@@ -65,7 +65,7 @@ final class DefaultPaywallRule {
 	 */
 	private function matches( int $post_id ): bool {
 		return match ( $this->settings->paywall_mode() ) {
-			SettingsRepository::MODE_ALL_POSTS => 'post' === get_post_type( $post_id )
+			SettingsRepository::PAYWALL_MODE_ALL_POSTS => 'post' === get_post_type( $post_id )
 				&& 'publish' === get_post_status( $post_id ),
 			default => has_term( $this->settings->paywall_category_term_id(), 'category', $post_id ),
 		};
