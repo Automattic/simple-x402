@@ -17,7 +17,6 @@ use SimpleX402\Services\FacilitatorProfile;
  * Schema:
  *   - mode:                     'test' | 'live'. Selects which nested block is
  *                               active and which FacilitatorProfile to use.
- *                               Overridable at runtime via `simple_x402_mode`.
  *   - test / live:              Per-mode blocks with `wallet_address` and
  *                               `default_price`. The `live` block additionally
  *                               carries `facilitator_url` (optional override of
@@ -27,6 +26,11 @@ use SimpleX402\Services\FacilitatorProfile;
  *   - paywall_category_term_id: term_id of the category used in `category` mode.
  *                               Stable identity — survives renames in Settings →
  *                               Categories without any action from this plugin.
+ *
+ * Getters trust `sanitize()` as the only writer — they do not re-validate
+ * stored values. Fresh installs return declared defaults; invalid data that
+ * somehow lands in the option (external writes, DB corruption) passes through,
+ * which surfaces bugs rather than silently masking them.
  */
 final class SettingsRepository {
 
@@ -60,8 +64,7 @@ final class SettingsRepository {
 	 */
 	public function mode(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
-		$mode   = is_array( $stored ) ? (string) ( $stored['mode'] ?? '' ) : '';
-		return in_array( $mode, self::VALID_X402_MODES, true ) ? $mode : self::DEFAULT_X402_MODE;
+		return $stored['mode'] ?? self::DEFAULT_X402_MODE;
 	}
 
 	/**
@@ -75,25 +78,21 @@ final class SettingsRepository {
 	 * Configured default price for the active mode, falling back to DEFAULT_PRICE.
 	 */
 	public function default_price(): string {
-		$price = $this->mode_string( 'default_price', '' );
-		if ( ! is_numeric( $price ) || (float) $price <= 0 ) {
-			return self::DEFAULT_PRICE;
-		}
-		return $price;
+		return $this->mode_string( 'default_price', self::DEFAULT_PRICE );
 	}
 
 	/**
 	 * Live-mode facilitator URL override (blank = use the profile default).
 	 */
 	public function live_facilitator_url(): string {
-		return (string) ( $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_url'] ?? '' );
+		return $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_url'] ?? '';
 	}
 
 	/**
 	 * Live-mode facilitator API key (blank if not configured).
 	 */
 	public function live_facilitator_api_key(): string {
-		return (string) ( $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_api_key'] ?? '' );
+		return $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_api_key'] ?? '';
 	}
 
 	/**
@@ -108,19 +107,17 @@ final class SettingsRepository {
 
 	public function paywall_mode(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
-		$mode   = is_array( $stored ) ? (string) ( $stored['paywall_mode'] ?? '' ) : '';
-		return in_array( $mode, self::VALID_PAYWALL_MODES, true ) ? $mode : self::DEFAULT_PAYWALL_MODE;
+		return $stored['paywall_mode'] ?? self::DEFAULT_PAYWALL_MODE;
 	}
 
 	public function paywall_audience(): string {
-		$stored   = get_option( self::OPTION_NAME, array() );
-		$audience = is_array( $stored ) ? (string) ( $stored['paywall_audience'] ?? '' ) : '';
-		return in_array( $audience, self::VALID_AUDIENCES, true ) ? $audience : self::DEFAULT_AUDIENCE;
+		$stored = get_option( self::OPTION_NAME, array() );
+		return $stored['paywall_audience'] ?? self::DEFAULT_AUDIENCE;
 	}
 
 	public function paywall_category_term_id(): int {
 		$stored = get_option( self::OPTION_NAME, array() );
-		return is_array( $stored ) ? (int) ( $stored['paywall_category_term_id'] ?? 0 ) : 0;
+		return $stored['paywall_category_term_id'] ?? 0;
 	}
 
 	/**
@@ -189,7 +186,6 @@ final class SettingsRepository {
 	 */
 	public function set_paywall_category_term_id( int $term_id ): void {
 		$stored                             = get_option( self::OPTION_NAME, array() );
-		$stored                             = is_array( $stored ) ? $stored : array();
 		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
 	}
@@ -198,8 +194,7 @@ final class SettingsRepository {
 	 * Read a string field from the active mode's block.
 	 */
 	private function mode_string( string $key, string $fallback ): string {
-		$block = $this->mode_block( $this->mode() );
-		return (string) ( $block[ $key ] ?? $fallback );
+		return $this->mode_block( $this->mode() )[ $key ] ?? $fallback;
 	}
 
 	/**
@@ -209,11 +204,7 @@ final class SettingsRepository {
 	 */
 	private function mode_block( string $mode ): array {
 		$stored = get_option( self::OPTION_NAME, array() );
-		if ( ! is_array( $stored ) ) {
-			return array();
-		}
-		$block = $stored[ $mode ] ?? array();
-		return is_array( $block ) ? $block : array();
+		return $stored[ $mode ] ?? array();
 	}
 
 	/**
