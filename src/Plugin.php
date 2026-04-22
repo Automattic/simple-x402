@@ -38,11 +38,12 @@ final class Plugin {
 	 */
 	public static function boot(): void {
 		$settings     = new SettingsRepository();
+		$profile      = $settings->facilitator_profile();
 		$rules        = new RuleResolver();
 		$controller   = new PaywallController(
 			$rules,
-			new PaymentRequirementsBuilder(),
-			new X402FacilitatorClient(),
+			new PaymentRequirementsBuilder( $profile ),
+			new X402FacilitatorClient( $profile ),
 			new GrantStore(),
 			$settings
 		);

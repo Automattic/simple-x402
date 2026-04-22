@@ -5,6 +5,7 @@ namespace SimpleX402\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\RuleResolver;
@@ -19,8 +20,11 @@ final class PaywallControllerTest extends TestCase {
 		$GLOBALS['__sx402_transients'] = array();
 		$GLOBALS['__sx402_options']    = array(
 			'simple_x402_settings' => array(
-				'wallet_address' => '0xreceiver',
-				'default_price'  => '0.01',
+				'mode' => 'test',
+				'test' => array(
+					'wallet_address' => '0xreceiver',
+					'default_price'  => '0.01',
+				),
 			),
 		);
 		$GLOBALS['__sx402_response']   = array(
@@ -36,10 +40,11 @@ final class PaywallControllerTest extends TestCase {
 	}
 
 	private function controller(): PaywallController {
+		$profile = FacilitatorProfile::for_test();
 		return new PaywallController(
 			new RuleResolver(),
-			new PaymentRequirementsBuilder(),
-			new X402FacilitatorClient(),
+			new PaymentRequirementsBuilder( $profile ),
+			new X402FacilitatorClient( $profile ),
 			new GrantStore(),
 			new SettingsRepository()
 		);

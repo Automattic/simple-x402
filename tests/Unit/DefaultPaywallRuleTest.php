@@ -29,7 +29,7 @@ final class DefaultPaywallRuleTest extends TestCase {
 			array(
 				'wallet_address'           => '',
 				'default_price'            => '0.01',
-				'paywall_mode'             => SettingsRepository::DEFAULT_MODE,
+				'paywall_mode'             => SettingsRepository::DEFAULT_PAYWALL_MODE,
 				'paywall_audience'         => SettingsRepository::AUDIENCE_EVERYONE,
 				'paywall_category_term_id' => self::DEFAULT_TERM_ID,
 			),
@@ -91,7 +91,7 @@ final class DefaultPaywallRuleTest extends TestCase {
 	}
 
 	public function test_all_posts_mode_gates_published_post(): void {
-		$this->set_options( array( 'paywall_mode' => SettingsRepository::MODE_ALL_POSTS ) );
+		$this->set_options( array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_ALL_POSTS ) );
 		$GLOBALS['__sx402_posts'][ 99 ] = array(
 			'post_type'   => 'post',
 			'post_status' => 'publish',
@@ -104,7 +104,7 @@ final class DefaultPaywallRuleTest extends TestCase {
 	}
 
 	public function test_all_posts_mode_ignores_pages(): void {
-		$this->set_options( array( 'paywall_mode' => SettingsRepository::MODE_ALL_POSTS ) );
+		$this->set_options( array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_ALL_POSTS ) );
 		$GLOBALS['__sx402_posts'][ 99 ] = array(
 			'post_type'   => 'page',
 			'post_status' => 'publish',
@@ -114,7 +114,7 @@ final class DefaultPaywallRuleTest extends TestCase {
 	}
 
 	public function test_all_posts_mode_ignores_drafts(): void {
-		$this->set_options( array( 'paywall_mode' => SettingsRepository::MODE_ALL_POSTS ) );
+		$this->set_options( array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_ALL_POSTS ) );
 		$GLOBALS['__sx402_posts'][ 99 ] = array(
 			'post_type'   => 'post',
 			'post_status' => 'draft',
@@ -124,7 +124,7 @@ final class DefaultPaywallRuleTest extends TestCase {
 	}
 
 	public function test_all_posts_mode_preserves_higher_priority_filter(): void {
-		$this->set_options( array( 'paywall_mode' => SettingsRepository::MODE_ALL_POSTS ) );
+		$this->set_options( array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_ALL_POSTS ) );
 		$rule   = $this->make_rule();
 		$preset = array( 'price' => '9.99', 'ttl' => 10 );
 		$this->assertSame( $preset, $rule( $preset, array( 'post_id' => 99 ) ) );

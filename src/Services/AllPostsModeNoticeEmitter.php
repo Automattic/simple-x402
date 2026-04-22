@@ -30,7 +30,7 @@ final class AllPostsModeNoticeEmitter {
 		}
 		$old_mode = is_array( $old_value ) ? (string) ( $old_value['paywall_mode'] ?? '' ) : '';
 		$new_mode = (string) ( $new_value['paywall_mode'] ?? '' );
-		if ( SettingsRepository::MODE_ALL_POSTS === $new_mode && SettingsRepository::MODE_ALL_POSTS !== $old_mode ) {
+		if ( SettingsRepository::PAYWALL_MODE_ALL_POSTS === $new_mode && SettingsRepository::PAYWALL_MODE_ALL_POSTS !== $old_mode ) {
 			$this->notifier->notify_mode_switched_to_all_posts();
 		}
 	}

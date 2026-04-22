@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace SimpleX402\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\X402FacilitatorClient;
 
 final class X402FacilitatorClientTest extends TestCase {
@@ -14,13 +15,16 @@ final class X402FacilitatorClientTest extends TestCase {
 		$GLOBALS['__sx402_http_queue'] = array();
 	}
 
-	public function test_verify_posts_to_x402_org_verify(): void {
+	private function test_client(): X402FacilitatorClient {
+		return new X402FacilitatorClient( FacilitatorProfile::for_test() );
+	}
+
+	public function test_verify_posts_to_profile_facilitator_verify(): void {
 		$GLOBALS['__sx402_http_next'] = array(
 			'response' => array( 'code' => 200 ),
 			'body'     => '{"isValid":true}',
 		);
-		$client = new X402FacilitatorClient();
-		$result = $client->verify( array( 'scheme' => 'exact' ), array( 'signature' => 'x' ) );
+		$result = $this->test_client()->verify( array( 'scheme' => 'exact' ), array( 'signature' => 'x' ) );
 
 		$this->assertSame( 'https://x402.org/facilitator/verify', $GLOBALS['__sx402_http']['url'] );
 		$this->assertTrue( $result['isValid'] );
@@ -35,13 +39,12 @@ final class X402FacilitatorClientTest extends TestCase {
 		);
 	}
 
-	public function test_settle_posts_to_x402_org_settle(): void {
+	public function test_settle_posts_to_profile_facilitator_settle(): void {
 		$GLOBALS['__sx402_http_next'] = array(
 			'response' => array( 'code' => 200 ),
 			'body'     => '{"success":true,"transaction":"0xabc"}',
 		);
-		$client = new X402FacilitatorClient();
-		$result = $client->settle( array( 'scheme' => 'exact' ), array( 'signature' => 'x' ) );
+		$result = $this->test_client()->settle( array( 'scheme' => 'exact' ), array( 'signature' => 'x' ) );
 
 		$this->assertSame( 'https://x402.org/facilitator/settle', $GLOBALS['__sx402_http']['url'] );
 		$this->assertTrue( $result['success'] );
@@ -50,8 +53,7 @@ final class X402FacilitatorClientTest extends TestCase {
 
 	public function test_wp_error_becomes_failure(): void {
 		$GLOBALS['__sx402_http_next'] = new \WP_Error( 'http_fail', 'boom' );
-		$client = new X402FacilitatorClient();
-		$result = $client->verify( array(), array() );
+		$result = $this->test_client()->verify( array(), array() );
 		$this->assertFalse( $result['isValid'] );
 		$this->assertSame( 'boom', $result['error'] );
 	}
@@ -61,9 +63,30 @@ final class X402FacilitatorClientTest extends TestCase {
 			'response' => array( 'code' => 500 ),
 			'body'     => '{"error":"bad"}',
 		);
-		$client = new X402FacilitatorClient();
-		$result = $client->settle( array(), array() );
+		$result = $this->test_client()->settle( array(), array() );
 		$this->assertFalse( $result['success'] );
 		$this->assertSame( 'bad', $result['error'] );
+	}
+
+	public function test_live_profile_sends_bearer_authorization(): void {
+		$GLOBALS['__sx402_http_next'] = array(
+			'response' => array( 'code' => 200 ),
+			'body'     => '{"isValid":true}',
+		);
+		$profile = FacilitatorProfile::for_live( 'https://facil.example/', 'my-api-key' );
+		$client  = new X402FacilitatorClient( $profile );
+		$client->verify( array(), array() );
+
+		$this->assertSame( 'https://facil.example/verify', $GLOBALS['__sx402_http']['url'] );
+		$this->assertSame( 'Bearer my-api-key', $GLOBALS['__sx402_http']['args']['headers']['Authorization'] );
+	}
+
+	public function test_test_profile_omits_authorization_header(): void {
+		$GLOBALS['__sx402_http_next'] = array(
+			'response' => array( 'code' => 200 ),
+			'body'     => '{"isValid":true}',
+		);
+		$this->test_client()->verify( array(), array() );
+		$this->assertArrayNotHasKey( 'Authorization', $GLOBALS['__sx402_http']['args']['headers'] );
 	}
 }
