@@ -195,8 +195,6 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
 	const isDirty = facilitator !== ( config.values.selected_facilitator_id || '' );
-	const testable = Boolean( config.testConnection?.url ) && '' !== facilitator;
-
 	const runTest = async () => {
 		setTesting( true );
 		setProbe( null );
@@ -244,23 +242,26 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 					} }
 				/>
 				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
-				<div className="simple-x402-page__field-help">
-					<Button
-						variant="link"
-						onClick={ runTest }
-						disabled={ ! testable || testing }
-						accessibleWhenDisabled
-					>
-						{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
-					</Button>
-					{ probe && (
-						<Text size={ 12 } variant="muted">
-							{ probe.ok
-								? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
-								: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
-						</Text>
-					) }
-				</div>
+				{ '' !== facilitator && (
+					<div className="simple-x402-page__field-help">
+						<Button
+							variant="link"
+							type="button"
+							onClick={ runTest }
+							disabled={ testing }
+							accessibleWhenDisabled
+						>
+							{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
+						</Button>
+						{ probe && (
+							<Text size={ 12 } variant="muted">
+								{ probe.ok
+									? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
+									: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
+							</Text>
+						) }
+					</div>
+				) }
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } />
 		</Card>
