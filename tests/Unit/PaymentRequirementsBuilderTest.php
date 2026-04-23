@@ -31,18 +31,6 @@ final class PaymentRequirementsBuilderTest extends TestCase {
 		$this->assertSame( array( 'name' => 'USDC', 'version' => '2' ), $req['extra'] );
 	}
 
-	public function test_builds_base_mainnet_usdc_requirements_in_live_mode(): void {
-		$builder = new PaymentRequirementsBuilder(
-			FacilitatorProfile::for_live()
-		);
-		$req     = $builder->build( '0xabc', '0.01', 'https://example.com', '' );
-
-		$this->assertSame( 'base', $req['network'] );
-		$this->assertSame( '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', $req['asset'] );
-		// Base mainnet USDC's EIP-712 domain name differs from Sepolia's.
-		$this->assertSame( array( 'name' => 'USD Coin', 'version' => '2' ), $req['extra'] );
-	}
-
 	public function test_price_with_many_decimals_is_truncated_to_asset_precision(): void {
 		$builder = new PaymentRequirementsBuilder(
 			FacilitatorProfile::for_test()

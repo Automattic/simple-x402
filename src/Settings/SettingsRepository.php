@@ -9,27 +9,21 @@ declare(strict_types=1);
 
 namespace SimpleX402\Settings;
 
-use SimpleX402\Services\FacilitatorProfile;
-use SimpleX402\Services\SettingsChangeNotifier;
-
 /**
  * Thin wrapper around a single wp_options row.
  *
  * Schema:
- *   - mode:                     'test' | 'live'. Selects which nested block is
- *                               active and which FacilitatorProfile to use.
- *   - test / live:              Per-mode blocks with `wallet_address` and
- *                               `default_price`. The `live` block additionally
- *                               carries `facilitator_url` (optional override of
- *                               the default CDP endpoint) and `facilitator_api_key`.
- *   - paywall_mode:             'none' | 'category' | 'all-posts'. `none`
- *                               disables gating entirely; the other two pick
- *                               which posts get gated. Shared across modes.
- *   - paywall_audience:         'everyone' | 'bots'. Who the paywall targets
- *                               once a post is selected for gating.
+ *   - wallet_address:           Receiving wallet for the selected facilitator.
+ *                               Network is decided by the facilitator itself.
+ *   - default_price:            Decimal USDC price per paywalled request.
+ *   - selected_facilitator_id:  Connector ID of the x402 facilitator to
+ *                               dispatch verify/settle through. '' = none
+ *                               selected; paywall is inert until a facilitator
+ *                               is chosen and the wallet is entered.
+ *   - paywall_mode:             'none' | 'category' | 'all-posts'. Picks which
+ *                               posts get gated.
+ *   - paywall_audience:         'everyone' | 'bots'. Who sees the paywall.
  *   - paywall_category_term_id: term_id of the category used in `category` mode.
- *                               Stable identity — survives renames in Settings →
- *                               Categories without any action from this plugin.
  *
  * Getters trust `sanitize()` as the only writer — they do not re-validate
  * stored values. Fresh installs return declared defaults; invalid data that
@@ -60,70 +54,29 @@ final class SettingsRepository {
 	);
 	public const DEFAULT_AUDIENCE  = self::AUDIENCE_BOTS;
 
-	public const VALID_X402_MODES  = array( FacilitatorProfile::MODE_TEST, FacilitatorProfile::MODE_LIVE );
-	public const DEFAULT_X402_MODE = FacilitatorProfile::MODE_TEST;
-
-	private const WALLET_ADDRESS_PATTERN = '/^0x[0-9a-fA-F]{40}$/';
+	public function __construct() {}
 
 	/**
-	 * @param SettingsChangeNotifier|null $notifier Receives notices when sanitize
-	 * has to revert a requested live-mode switch. Optional so callers that only
-	 * read the option (activation, plain getters) don't need the wiring.
-	 */
-	public function __construct( private readonly ?SettingsChangeNotifier $notifier = null ) {}
-
-	/**
-	 * Active x402 mode: 'test' or 'live'.
-	 */
-	public function mode(): string {
-		$stored = get_option( self::OPTION_NAME, array() );
-		return $stored['mode'] ?? self::DEFAULT_X402_MODE;
-	}
-
-	/**
-	 * Configured receiving wallet for the active mode, or '' if not set.
+	 * Configured receiving wallet, or '' if not set.
 	 */
 	public function wallet_address(): string {
-		return $this->mode_string( 'wallet_address', '' );
+		$stored = get_option( self::OPTION_NAME, array() );
+		return isset( $stored['wallet_address'] ) ? (string) $stored['wallet_address'] : '';
 	}
 
 	/**
-	 * Configured default price for the active mode, falling back to DEFAULT_PRICE.
+	 * Configured default price, falling back to DEFAULT_PRICE.
 	 */
 	public function default_price(): string {
-		return $this->mode_string( 'default_price', self::DEFAULT_PRICE );
-	}
-
-	/**
-	 * Live-mode facilitator URL override (blank = use the profile default).
-	 */
-	public function live_facilitator_url(): string {
-		return $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_url'] ?? '';
-	}
-
-	/**
-	 * Live-mode facilitator API key (blank if not configured).
-	 */
-	public function live_facilitator_api_key(): string {
-		return $this->mode_block( FacilitatorProfile::MODE_LIVE )['facilitator_api_key'] ?? '';
-	}
-
-	/**
-	 * Build the FacilitatorProfile for the active mode, overlaying stored
-	 * live-mode overrides (facilitator URL, API key) onto the canonical defaults.
-	 */
-	public function facilitator_profile(): FacilitatorProfile {
-		return FacilitatorProfile::MODE_LIVE === $this->mode()
-			? FacilitatorProfile::for_live( $this->live_facilitator_url(), $this->live_facilitator_api_key() )
-			: FacilitatorProfile::for_test();
+		$stored = get_option( self::OPTION_NAME, array() );
+		$stored_price = isset( $stored['default_price'] ) ? (string) $stored['default_price'] : '';
+		return '' === $stored_price ? self::DEFAULT_PRICE : $stored_price;
 	}
 
 	/**
 	 * ID of the x402 facilitator connector to dispatch verify/settle through.
-	 *
-	 * Empty string (default) means "use the legacy mode-based FacilitatorProfile path."
-	 * A non-empty string is only honoured when it resolves to a registered
-	 * `x402_facilitator` connector; unresolved IDs fall back transparently.
+	 * Empty string (default) means no facilitator is selected; the paywall
+	 * sits inert until the site owner picks one.
 	 */
 	public function selected_facilitator_id(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
@@ -150,39 +103,9 @@ final class SettingsRepository {
 	 * `register_setting` sanitize_callback: it reads stored state but must not
 	 * write (calling `update_option` here recurses).
 	 *
-	 * Per-mode blocks are sanitized independently so an admin can keep live
-	 * settings filled while editing test, and vice versa.
-	 *
 	 * @param array $input Raw input.
 	 */
 	public function sanitize( array $input ): array {
-		$mode = isset( $input['mode'] ) ? (string) $input['mode'] : '';
-		if ( ! in_array( $mode, self::VALID_X402_MODES, true ) ) {
-			$mode = self::DEFAULT_X402_MODE;
-		}
-
-		$test_raw = isset( $input[ FacilitatorProfile::MODE_TEST ] ) && is_array( $input[ FacilitatorProfile::MODE_TEST ] )
-			? $input[ FacilitatorProfile::MODE_TEST ]
-			: array();
-		$live_raw = isset( $input[ FacilitatorProfile::MODE_LIVE ] ) && is_array( $input[ FacilitatorProfile::MODE_LIVE ] )
-			? $input[ FacilitatorProfile::MODE_LIVE ]
-			: array();
-
-		$test_block = $this->sanitize_test_block( $test_raw );
-		$live_block = $this->sanitize_live_block( $live_raw );
-
-		// Live mode requires a routable destination wallet AND a facilitator
-		// API key — without either, every settle request silently fails. Refuse
-		// the switch (drop back to test) and surface a notice so the admin
-		// understands why the radio appears to have ignored them.
-		if ( FacilitatorProfile::MODE_LIVE === $mode ) {
-			$missing = $this->live_mode_issues( $live_block );
-			if ( array() !== $missing ) {
-				$mode = FacilitatorProfile::MODE_TEST;
-				$this->notifier?->notify_live_mode_incomplete( $missing );
-			}
-		}
-
 		$paywall_mode = isset( $input['paywall_mode'] ) ? (string) $input['paywall_mode'] : '';
 		if ( ! in_array( $paywall_mode, self::VALID_PAYWALL_MODES, true ) ) {
 			$paywall_mode = self::DEFAULT_PAYWALL_MODE;
@@ -199,38 +122,21 @@ final class SettingsRepository {
 		}
 
 		// Connector IDs are constrained by the Connectors API to a-z0-9_-.
-		// Strip anything else; callers store a clean value or nothing.
 		$selected_facilitator_id = isset( $input['selected_facilitator_id'] )
 			? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $input['selected_facilitator_id'] ) )
 			: '';
 
-		return array(
-			'mode'                        => $mode,
-			FacilitatorProfile::MODE_TEST => $test_block,
-			FacilitatorProfile::MODE_LIVE => $live_block,
-			'paywall_mode'                => $paywall_mode,
-			'paywall_audience'            => $audience,
-			'paywall_category_term_id'    => $term_id,
-			'selected_facilitator_id'     => $selected_facilitator_id,
-		);
-	}
+		$wallet = isset( $input['wallet_address'] ) ? trim( (string) $input['wallet_address'] ) : '';
+		$price  = $this->sanitize_price( $input['default_price'] ?? '' );
 
-	/**
-	 * @param array<string,string> $live_block Sanitized live block.
-	 * @return string[] Human-readable phrases for each missing requirement.
-	 */
-	private function live_mode_issues( array $live_block ): array {
-		$issues = array();
-		$wallet = $live_block['wallet_address'] ?? '';
-		if ( '' === $wallet ) {
-			$issues[] = __( 'a receiving wallet address', 'simple-x402' );
-		} elseif ( 1 !== preg_match( self::WALLET_ADDRESS_PATTERN, $wallet ) ) {
-			$issues[] = __( 'a valid wallet address (0x followed by 40 hex characters)', 'simple-x402' );
-		}
-		if ( '' === ( $live_block['facilitator_api_key'] ?? '' ) ) {
-			$issues[] = __( 'a facilitator API key', 'simple-x402' );
-		}
-		return $issues;
+		return array(
+			'wallet_address'           => $wallet,
+			'default_price'            => $price,
+			'selected_facilitator_id'  => $selected_facilitator_id,
+			'paywall_mode'             => $paywall_mode,
+			'paywall_audience'         => $audience,
+			'paywall_category_term_id' => $term_id,
+		);
 	}
 
 	/**
@@ -253,51 +159,6 @@ final class SettingsRepository {
 		$stored                             = get_option( self::OPTION_NAME, array() );
 		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
-	}
-
-	/**
-	 * Read a string field from the active mode's block.
-	 */
-	private function mode_string( string $key, string $fallback ): string {
-		return $this->mode_block( $this->mode() )[ $key ] ?? $fallback;
-	}
-
-	/**
-	 * Fetch the nested block for a given mode, or an empty array if unset.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private function mode_block( string $mode ): array {
-		$stored = get_option( self::OPTION_NAME, array() );
-		return $stored[ $mode ] ?? array();
-	}
-
-	/**
-	 * @param array<string,mixed> $raw
-	 * @return array<string,string>
-	 */
-	private function sanitize_test_block( array $raw ): array {
-		return array(
-			'wallet_address' => isset( $raw['wallet_address'] ) ? trim( (string) $raw['wallet_address'] ) : '',
-			'default_price'  => $this->sanitize_price( $raw['default_price'] ?? '' ),
-		);
-	}
-
-	/**
-	 * @param array<string,mixed> $raw
-	 * @return array<string,string>
-	 */
-	private function sanitize_live_block( array $raw ): array {
-		$url = isset( $raw['facilitator_url'] ) ? trim( (string) $raw['facilitator_url'] ) : '';
-		if ( '' !== $url && ! preg_match( '#^https?://#i', $url ) ) {
-			$url = '';
-		}
-		return array(
-			'wallet_address'      => isset( $raw['wallet_address'] ) ? trim( (string) $raw['wallet_address'] ) : '',
-			'default_price'       => $this->sanitize_price( $raw['default_price'] ?? '' ),
-			'facilitator_url'     => $url,
-			'facilitator_api_key' => isset( $raw['facilitator_api_key'] ) ? trim( (string) $raw['facilitator_api_key'] ) : '',
-		);
 	}
 
 	private function sanitize_price( mixed $raw ): string {

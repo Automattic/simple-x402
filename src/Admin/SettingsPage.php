@@ -11,7 +11,6 @@ namespace SimpleX402\Admin;
 
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
@@ -159,14 +158,6 @@ final class SettingsPage {
 	 * @return array<string,mixed>
 	 */
 	public function bootstrap_data(): array {
-		$test_profile = FacilitatorProfile::for_test();
-		$live_profile = FacilitatorProfile::for_live();
-
-		$stored     = get_option( SettingsRepository::OPTION_NAME, array() );
-		$stored     = is_array( $stored ) ? $stored : array();
-		$test_block = is_array( $stored[ FacilitatorProfile::MODE_TEST ] ?? null ) ? $stored[ FacilitatorProfile::MODE_TEST ] : array();
-		$live_block = is_array( $stored[ FacilitatorProfile::MODE_LIVE ] ?? null ) ? $stored[ FacilitatorProfile::MODE_LIVE ] : array();
-
 		$categories = array_map(
 			static fn ( $term ): array => array(
 				'term_id' => (int) $term->term_id,
@@ -193,49 +184,31 @@ final class SettingsPage {
 		return array(
 			'option' => SettingsRepository::OPTION_NAME,
 			'modes'  => array(
-				'paywall'     => array(
+				'paywall'  => array(
 					'none'     => SettingsRepository::PAYWALL_MODE_NONE,
 					'allPosts' => SettingsRepository::PAYWALL_MODE_ALL_POSTS,
 					'category' => SettingsRepository::PAYWALL_MODE_CATEGORY,
 				),
-				'audience'    => array(
+				'audience' => array(
 					'everyone' => SettingsRepository::AUDIENCE_EVERYONE,
 					'bots'     => SettingsRepository::AUDIENCE_BOTS,
 				),
-				'facilitator' => array(
-					'test' => FacilitatorProfile::MODE_TEST,
-					'live' => FacilitatorProfile::MODE_LIVE,
-				),
 			),
-			'labels' => array(
-				'testMode' => $test_profile->label,
-				'liveMode' => $live_profile->label,
+			'categories'    => $categories,
+			'modeCategory'  => SettingsRepository::PAYWALL_MODE_CATEGORY,
+			'facilitators'  => $facilitators,
+			'testConnection' => array(
+				'action' => TestConnectionAjax::ACTION,
+				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( TestConnectionAjax::NONCE ) : '',
+				'url'    => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
 			),
-			'liveFacilitatorPlaceholder' => FacilitatorProfile::LIVE_FACILITATOR_URL_DEFAULT,
-			'categories'                 => $categories,
-			'modeCategory'               => SettingsRepository::PAYWALL_MODE_CATEGORY,
-			'facilitators'               => $facilitators,
-			'testConnection'             => array(
-				'action'  => TestConnectionAjax::ACTION,
-				'nonce'   => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( TestConnectionAjax::NONCE ) : '',
-				'url'     => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
-			),
-			'values'                     => array(
-				'mode'                     => $this->settings->mode(),
+			'values' => array(
 				'paywall_mode'             => $this->settings->paywall_mode(),
 				'paywall_audience'         => $this->settings->paywall_audience(),
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),
 				'selected_facilitator_id'  => $this->settings->selected_facilitator_id(),
-				'test'                     => array(
-					'wallet_address' => (string) ( $test_block['wallet_address'] ?? '' ),
-					'default_price'  => (string) ( $test_block['default_price'] ?? '' ),
-				),
-				'live'                     => array(
-					'wallet_address'      => (string) ( $live_block['wallet_address'] ?? '' ),
-					'default_price'       => (string) ( $live_block['default_price'] ?? '' ),
-					'facilitator_url'     => (string) ( $live_block['facilitator_url'] ?? '' ),
-					'facilitator_api_key' => (string) ( $live_block['facilitator_api_key'] ?? '' ),
-				),
+				'wallet_address'           => $this->settings->wallet_address(),
+				'default_price'            => $this->settings->default_price(),
 			),
 		);
 	}

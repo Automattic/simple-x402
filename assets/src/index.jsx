@@ -20,10 +20,6 @@ function name( field ) {
 	return `${ config.option }[${ field }]`;
 }
 
-function nestedName( mode, field ) {
-	return `${ config.option }[${ mode }][${ field }]`;
-}
-
 function SaveFooter( { disabled = false } ) {
 	return (
 		<CardFooter className="simple-x402-page__card-footer">
@@ -171,63 +167,6 @@ function AudienceCard( { audience, setAudience } ) {
 	);
 }
 
-const MODE_FIELDS = [
-	{
-		id: 'isLive',
-		label: __( 'Enable live mode', 'simple-x402' ),
-		type: 'boolean',
-		Edit: 'toggle',
-	},
-];
-
-const TEST_FIELDS = [
-	{
-		id: 'wallet_address',
-		label: __( 'Receiving wallet (Base Sepolia)', 'simple-x402' ),
-		type: 'text',
-	},
-	{
-		id: 'default_price',
-		label: __( 'Price per request (USDC)', 'simple-x402' ),
-		type: 'number',
-	},
-];
-
-const LIVE_FIELDS = [
-	{
-		id: 'wallet_address',
-		label: __( 'Receiving wallet (Base mainnet)', 'simple-x402' ),
-		type: 'text',
-	},
-	{
-		id: 'default_price',
-		label: __( 'Price per request (USDC)', 'simple-x402' ),
-		type: 'number',
-	},
-	{
-		id: 'facilitator_url',
-		label: __( 'Facilitator URL', 'simple-x402' ),
-		type: 'text',
-		placeholder: config.liveFacilitatorPlaceholder,
-		description: __( 'Leave blank to use the Coinbase CDP default.', 'simple-x402' ),
-	},
-	{
-		id: 'facilitator_api_key',
-		label: __( 'Facilitator API key', 'simple-x402' ),
-		type: 'password',
-	},
-];
-
-function ActiveBadge() {
-	return (
-		<span className="simple-x402-badge simple-x402-badge--active">
-			{ __( 'Active', 'simple-x402' ) }
-		</span>
-	);
-}
-
-const DEFAULT_FACILITATOR_VALUE = '';
-
 function facilitatorOptions() {
 	const entries = ( config.facilitators || [] ).map( ( f ) => ( {
 		value: f.id,
@@ -235,8 +174,8 @@ function facilitatorOptions() {
 	} ) );
 	return [
 		{
-			value: DEFAULT_FACILITATOR_VALUE,
-			label: __( 'Default (use the mode-based settings below)', 'simple-x402' ),
+			value: '',
+			label: __( '— Select a facilitator —', 'simple-x402' ),
 		},
 		...entries,
 	];
@@ -253,7 +192,7 @@ const FACILITATOR_FIELDS = [
 ];
 
 function FacilitatorCard( { facilitator, setFacilitator } ) {
-	const [ probe, setProbe ] = useState( null ); // { ok, http_code, duration_ms, error } | null
+	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
 	const isDirty = facilitator !== ( config.values.selected_facilitator_id || '' );
 	const testable = Boolean( config.testConnection?.url ) && '' !== facilitator;
@@ -286,7 +225,7 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 				<CardTitle
 					title={ __( 'Facilitator', 'simple-x402' ) }
 					subtitle={ __(
-						'Where verify and settle requests are sent. Leave on Default to keep the legacy mode-based path.',
+						'Where verify and settle requests are sent. The paywall is inert until one is selected.',
 						'simple-x402'
 					) }
 				/>
@@ -312,12 +251,10 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 						disabled={ ! testable || testing }
 						accessibleWhenDisabled
 					>
-						{ testing
-							? __( 'Testing…', 'simple-x402' )
-							: __( 'Test connection', 'simple-x402' ) }
+						{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
 					</Button>
 					{ probe && (
-						<Text size={ 13 } variant={ probe.ok ? 'muted' : 'muted' }>
+						<Text size={ 13 } variant="muted">
 							{ probe.ok
 								? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
 								: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
@@ -330,105 +267,47 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 	);
 }
 
-function PaymentDetailsCard( { mode, setMode } ) {
-	const isLive = mode === config.modes.facilitator.live;
-	const isDirty = mode !== config.values.mode;
+const PAYMENT_FIELDS = [
+	{
+		id: 'wallet_address',
+		label: __( 'Receiving wallet', 'simple-x402' ),
+		type: 'text',
+	},
+	{
+		id: 'default_price',
+		label: __( 'Price per request (USDC)', 'simple-x402' ),
+		type: 'number',
+	},
+];
 
+function PaymentCard( { values, setValues } ) {
+	const isDirty = ! isShallowEqual( values, {
+		wallet_address: config.values.wallet_address || '',
+		default_price:  config.values.default_price || '',
+	} );
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle
-					title={ __( 'Mode', 'simple-x402' ) }
+					title={ __( 'Payment', 'simple-x402' ) }
 					subtitle={ __(
-						'Switch between the test network and live payments.',
+						'Wallet to receive funds and price per paywalled request. Network is set by the selected facilitator.',
 						'simple-x402'
 					) }
 				/>
 			</CardHeader>
 			<CardBody>
 				<DataForm
-					data={ { isLive } }
-					fields={ MODE_FIELDS }
+					data={ values }
+					fields={ PAYMENT_FIELDS }
 					form={ {
-						layout: { type: 'regular', labelPosition: 'none' },
-						fields: [ 'isLive' ],
+						layout: { type: 'regular', labelPosition: 'top' },
+						fields: PAYMENT_FIELDS.map( ( f ) => f.id ),
 					} }
-					onChange={ ( edits ) =>
-						setMode(
-							edits.isLive
-								? config.modes.facilitator.live
-								: config.modes.facilitator.test
-						)
-					}
+					onChange={ ( edits ) => setValues( { ...values, ...edits } ) }
 				/>
-				<input type="hidden" name={ name( 'mode' ) } value={ mode } />
-			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
-		</Card>
-	);
-}
-
-function PaymentSettingsCard( { testValues, setTest, liveValues, setLive } ) {
-	const savedIsLive = config.values.mode === config.modes.facilitator.live;
-	const isDirty =
-		! isShallowEqual( testValues, config.values.test ) ||
-		! isShallowEqual( liveValues, config.values.live );
-
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle
-					title={ __( 'Payment settings', 'simple-x402' ) }
-					subtitle={ __(
-						'Wallet address and pricing for each network.',
-						'simple-x402'
-					) }
-				/>
-			</CardHeader>
-			<CardBody>
-				<VStack spacing={ 6 }>
-					<VStack spacing={ 3 }>
-						<HStack spacing={ 2 } justify="flex-start">
-							<Text size={ 13 } weight={ 600 }>
-								{ __( 'Test settings', 'simple-x402' ) }
-							</Text>
-							{ ! savedIsLive && <ActiveBadge /> }
-						</HStack>
-						<DataForm
-							data={ testValues }
-							fields={ TEST_FIELDS }
-							form={ {
-								layout: { type: 'regular', labelPosition: 'top' },
-								fields: TEST_FIELDS.map( ( f ) => f.id ),
-							} }
-							onChange={ ( edits ) => setTest( { ...testValues, ...edits } ) }
-						/>
-						<input type="hidden" name={ nestedName( 'test', 'wallet_address' ) } value={ testValues.wallet_address || '' } />
-						<input type="hidden" name={ nestedName( 'test', 'default_price' ) } value={ testValues.default_price || '' } />
-					</VStack>
-
-					<VStack spacing={ 3 }>
-						<HStack spacing={ 2 } justify="flex-start">
-							<Text size={ 13 } weight={ 600 }>
-								{ __( 'Live settings', 'simple-x402' ) }
-							</Text>
-							{ savedIsLive && <ActiveBadge /> }
-						</HStack>
-						<DataForm
-							data={ liveValues }
-							fields={ LIVE_FIELDS }
-							form={ {
-								layout: { type: 'regular', labelPosition: 'top' },
-								fields: LIVE_FIELDS.map( ( f ) => f.id ),
-							} }
-							onChange={ ( edits ) => setLive( { ...liveValues, ...edits } ) }
-						/>
-						<input type="hidden" name={ nestedName( 'live', 'wallet_address' ) } value={ liveValues.wallet_address || '' } />
-						<input type="hidden" name={ nestedName( 'live', 'default_price' ) } value={ liveValues.default_price || '' } />
-						<input type="hidden" name={ nestedName( 'live', 'facilitator_url' ) } value={ liveValues.facilitator_url || '' } />
-						<input type="hidden" name={ nestedName( 'live', 'facilitator_api_key' ) } value={ liveValues.facilitator_api_key || '' } />
-					</VStack>
-				</VStack>
+				<input type="hidden" name={ name( 'wallet_address' ) } value={ values.wallet_address || '' } />
+				<input type="hidden" name={ name( 'default_price' ) } value={ values.default_price || '' } />
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } />
 		</Card>
@@ -438,13 +317,14 @@ function PaymentSettingsCard( { testValues, setTest, liveValues, setLive } ) {
 function SettingsApp() {
 	const initial = config.values;
 
-	const [ mode, setMode ] = useState( initial.mode );
 	const [ paywallMode, setPaywallMode ] = useState( initial.paywall_mode );
 	const [ audience, setAudience ] = useState( initial.paywall_audience );
 	const [ termId, setTermId ] = useState( initial.paywall_category_term_id );
-	const [ testValues, setTest ] = useState( initial.test );
-	const [ liveValues, setLive ] = useState( initial.live );
 	const [ facilitator, setFacilitator ] = useState( initial.selected_facilitator_id || '' );
+	const [ payment, setPayment ] = useState( {
+		wallet_address: initial.wallet_address || '',
+		default_price:  initial.default_price || '',
+	} );
 
 	const noticesRef = useRef( null );
 	useEffect( () => {
@@ -486,14 +366,7 @@ function SettingsApp() {
 					setFacilitator={ setFacilitator }
 				/>
 
-				<PaymentDetailsCard mode={ mode } setMode={ setMode } />
-
-				<PaymentSettingsCard
-					testValues={ testValues }
-					setTest={ setTest }
-					liveValues={ liveValues }
-					setLive={ setLive }
-				/>
+				<PaymentCard values={ payment } setValues={ setPayment } />
 			</VStack>
 		</div>
 	);

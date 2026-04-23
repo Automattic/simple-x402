@@ -5,9 +5,7 @@ namespace SimpleX402\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
-use SimpleX402\Facilitator\TestResult;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
@@ -22,12 +20,22 @@ final class PaywallControllerTest extends TestCase {
 		$GLOBALS['__sx402_transients'] = array();
 		$GLOBALS['__sx402_options']    = array(
 			'simple_x402_settings' => array(
-				'mode' => 'test',
-				'test' => array(
-					'wallet_address' => '0xreceiver',
-					'default_price'  => '0.01',
-				),
+				'wallet_address'          => '0xreceiver',
+				'default_price'           => '0.01',
+				'selected_facilitator_id' => 'simple_x402_test',
 			),
+		);
+		// Default: one x402_facilitator connector, resolved via the filter.
+		$GLOBALS['__sx402_connectors'] = array(
+			'simple_x402_test' => array( 'type' => ConnectorRegistry::FACILITATOR_TYPE ),
+		);
+		add_filter(
+			FacilitatorResolver::FILTER,
+			static fn ( $existing, $id ) => 'simple_x402_test' === $id && null === $existing
+				? new \SimpleX402\Services\X402FacilitatorClient( FacilitatorProfile::for_test() )
+				: $existing,
+			10,
+			2
 		);
 		$GLOBALS['__sx402_response']   = array(
 			'status'  => 200,
@@ -45,7 +53,8 @@ final class PaywallControllerTest extends TestCase {
 		return new PaywallController(
 			new RuleResolver(),
 			new GrantStore(),
-			$settings ?? new SettingsRepository()
+			$settings ?? new SettingsRepository(),
+			new FacilitatorResolver( new ConnectorRegistry() ),
 		);
 	}
 
@@ -361,7 +370,6 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertNull( $this->private_field( $controller, 'profile' ) );
 		$this->assertNull( $this->private_field( $controller, 'builder' ) );
 		$this->assertNull( $this->private_field( $controller, 'facilitator_svc' ) );
 	}
@@ -395,7 +403,6 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertNotNull( $this->private_field( $controller, 'profile' ) );
 		$this->assertNotNull( $this->private_field( $controller, 'builder' ) );
 		$this->assertNotNull( $this->private_field( $controller, 'facilitator_svc' ) );
 	}
@@ -406,102 +413,40 @@ final class PaywallControllerTest extends TestCase {
 		return $prop->getValue( $obj );
 	}
 
-	public function test_uses_resolver_facilitator_when_selected_id_is_set(): void {
-		// Point the setting at a registered connector and wire our recording mock
-		// to the filter the resolver applies.
-		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = 'simple_x402_test';
-		$GLOBALS['__sx402_connectors']['simple_x402_test']                              = array(
-			'type' => ConnectorRegistry::FACILITATOR_TYPE,
-		);
-
-		$calls = array();
-		$mock  = new class($calls) implements Facilitator {
-			/** @param array<int,string> $calls */
-			public function __construct( private array &$calls ) {}
-			public function verify( array $r, array $p ): array {
-				$this->calls[] = 'verify';
-				return array( 'isValid' => true, 'error' => null, 'raw' => array() );
-			}
-			public function settle( array $r, array $p ): array {
-				$this->calls[] = 'settle';
-				return array( 'success' => true, 'transaction' => '0xmock', 'network' => 'test', 'error' => null, 'raw' => array() );
-			}
-			public function test_connection(): TestResult {
-				return new TestResult( ok: true );
-			}
-			public function describe(): FacilitatorProfile {
-				return FacilitatorProfile::for_test();
-			}
-		};
-		add_filter(
-			FacilitatorResolver::FILTER,
-			fn ( $existing, $id ) => 'simple_x402_test' === $id ? $mock : $existing,
-			10,
-			2
-		);
-
+	public function test_paywall_is_inert_when_no_facilitator_is_selected(): void {
+		// Clear the default test-setup selection. No facilitator = paywall
+		// passes requests through untouched even when a rule matches.
+		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = '';
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$payload = X402HeaderCodec::encode(
-			array(
-				'scheme'  => 'exact',
-				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
-			)
-		);
 
-		$controller = new PaywallController(
-			new RuleResolver(),
-			new GrantStore(),
-			new SettingsRepository(),
-			new FacilitatorResolver( new ConnectorRegistry() ),
-		);
-		$controller->handle(
+		$this->controller()->handle(
 			array(
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array(),
 			)
 		);
 
-		// Resolver-backed facilitator received both calls; no HTTP request was made.
-		$this->assertSame( array( 'verify', 'settle' ), $calls );
-		$this->assertNull( $GLOBALS['__sx402_http'] );
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 
-	public function test_falls_back_to_legacy_client_when_resolver_returns_null(): void {
-		// Setting points at an unregistered connector — resolver gives up, legacy
-		// X402FacilitatorClient takes over and the normal HTTP flow happens.
+	public function test_paywall_is_inert_when_selected_connector_is_unknown(): void {
+		// Stale selection pointing at a connector that isn't registered any more.
 		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = 'nonexistent';
-
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$payload = X402HeaderCodec::encode(
-			array(
-				'scheme'  => 'exact',
-				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
-			)
-		);
-		$GLOBALS['__sx402_http_queue'] = array(
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xlegacy"}' ),
-		);
 
-		$controller = new PaywallController(
-			new RuleResolver(),
-			new GrantStore(),
-			new SettingsRepository(),
-			new FacilitatorResolver( new ConnectorRegistry() ),
-		);
-		$controller->handle(
+		$this->controller()->handle(
 			array(
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array(),
 			)
 		);
 
-		// Legacy HTTP client was used — this proves the fallback didn't short-circuit to 402.
-		$this->assertNotNull( $GLOBALS['__sx402_http'] );
-		$this->assertTrue( ( new GrantStore() )->has_grant( '0xbuyer', '/foo' ) );
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 }

@@ -40,7 +40,7 @@ final class Plugin {
 	 */
 	public static function boot(): void {
 		$notifier     = new SettingsChangeNotifier();
-		$settings     = new SettingsRepository( $notifier );
+		$settings     = new SettingsRepository();
 		$rules        = new RuleResolver();
 		$connectors   = new ConnectorRegistry();
 		$resolver     = new FacilitatorResolver( $connectors );

@@ -68,12 +68,21 @@ final class X402FacilitatorClientTest extends TestCase {
 		$this->assertSame( 'bad', $result['error'] );
 	}
 
-	public function test_live_profile_sends_bearer_authorization(): void {
+	public function test_profile_with_api_key_sends_bearer_authorization(): void {
 		$GLOBALS['__sx402_http_next'] = array(
 			'response' => array( 'code' => 200 ),
 			'body'     => '{"isValid":true}',
 		);
-		$profile = FacilitatorProfile::for_live( 'https://facil.example/', 'my-api-key' );
+		$profile = new FacilitatorProfile(
+			network: 'base',
+			asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+			asset_decimals: 6,
+			facilitator_url: 'https://facil.example/',
+			eip712_name: 'USD Coin',
+			eip712_version: '2',
+			environment_label: 'Live',
+			api_key: 'my-api-key',
+		);
 		$client  = new X402FacilitatorClient( $profile );
 		$client->verify( array(), array() );
 
