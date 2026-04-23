@@ -1,5 +1,5 @@
 import { createRoot, useEffect, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	Card,
@@ -293,7 +293,11 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 							{ probe && (
 								<Text size={ 13 } variant="muted">
 									{ probe.ok
-										? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
+										? sprintf(
+											/* translators: %d: probe duration in milliseconds. */
+											__( '✓ Succeeded in %dms', 'simple-x402' ),
+											probe.duration_ms ?? 0
+										)
 										: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
 								</Text>
 							) }
