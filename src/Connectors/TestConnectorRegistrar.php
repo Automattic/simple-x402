@@ -1,6 +1,6 @@
 <?php
 /**
- * Registers the built-in "Simple x402 (test)" facilitator connector.
+ * Registers the built-in "x402.org (Test network)" facilitator connector.
  *
  * @package SimpleX402
  */
@@ -60,7 +60,7 @@ final class TestConnectorRegistrar {
 	 */
 	public static function payload(): array {
 		return array(
-			'name'           => 'Simple x402 (test)',
+			'name'           => 'x402.org (Test network)',
 			'description'    => 'Built-in test facilitator. Routes through x402.org on Base Sepolia — no real funds move.',
 			'type'           => ConnectorRegistry::FACILITATOR_TYPE,
 			'authentication' => array( 'method' => 'none' ),

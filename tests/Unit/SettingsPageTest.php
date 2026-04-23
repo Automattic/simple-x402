@@ -103,7 +103,7 @@ final class SettingsPageTest extends TestCase {
 		);
 		$GLOBALS['__sx402_connectors']['simple_x402_test'] = array(
 			'type'        => ConnectorRegistry::FACILITATOR_TYPE,
-			'name'        => 'Simple x402 (test)',
+			'name'        => 'x402.org (Test network)',
 			'description' => 'Testnet',
 		);
 
@@ -129,7 +129,7 @@ final class SettingsPageTest extends TestCase {
 			array(
 				array(
 					'id'          => 'simple_x402_test',
-					'name'        => 'Simple x402 (test)',
+					'name'        => 'x402.org (Test network)',
 					'description' => 'Testnet',
 				),
 			),
