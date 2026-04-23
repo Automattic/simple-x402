@@ -22,11 +22,9 @@ final class PaywallControllerTest extends TestCase {
 			'simple_x402_settings' => array(
 				'selected_facilitator_id' => 'simple_x402_test',
 				'facilitators'            => array(
-					'simple_x402_test' => array(
-						'wallet_address' => '0xreceiver',
-						'default_price'  => '0.01',
-					),
+					'simple_x402_test' => array( 'wallet_address' => '0xreceiver' ),
 				),
+				'default_price'           => '0.01',
 			),
 		);
 		// Default: one x402_facilitator connector, resolved via the filter.

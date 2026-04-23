@@ -35,15 +35,10 @@ final class SettingsRepositoryTest extends TestCase {
 			array(
 				'selected_facilitator_id'  => 'simple_x402_test',
 				'facilitators'             => array(
-					'simple_x402_test' => array(
-						'wallet_address' => '0xTest',
-						'default_price'  => '0.25',
-					),
-					'coinbase_cdp'     => array(
-						'wallet_address' => '0xLive',
-						'default_price'  => '0.10',
-					),
+					'simple_x402_test' => array( 'wallet_address' => '0xTest' ),
+					'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
 				),
+				'default_price'            => '0.25',
 				'paywall_category_term_id' => 7,
 			)
 		);
@@ -51,31 +46,29 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( '0.25', $repo->default_price() );
 	}
 
-	public function test_switching_selected_facilitator_recalls_its_stored_slot(): void {
+	public function test_switching_selected_facilitator_recalls_its_wallet_slot(): void {
 		$repo = new SettingsRepository();
 		$repo->save(
 			array(
 				'selected_facilitator_id' => 'simple_x402_test',
 				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0xTest', 'default_price' => '0.0001' ),
-					'coinbase_cdp'     => array( 'wallet_address' => '0xLive', 'default_price' => '0.10' ),
+					'simple_x402_test' => array( 'wallet_address' => '0xTest' ),
+					'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
 				),
 			)
 		);
 		$this->assertSame( '0xTest', $repo->wallet_address() );
-		$this->assertSame( '0.0001', $repo->default_price() );
 
 		$repo->save(
 			array(
 				'selected_facilitator_id' => 'coinbase_cdp',
 				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0xTest', 'default_price' => '0.0001' ),
-					'coinbase_cdp'     => array( 'wallet_address' => '0xLive', 'default_price' => '0.10' ),
+					'simple_x402_test' => array( 'wallet_address' => '0xTest' ),
+					'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
 				),
 			)
 		);
 		$this->assertSame( '0xLive', $repo->wallet_address() );
-		$this->assertSame( '0.10', $repo->default_price() );
 	}
 
 	public function test_wallet_address_for_reads_arbitrary_slot_regardless_of_selection(): void {
@@ -84,35 +77,20 @@ final class SettingsRepositoryTest extends TestCase {
 			array(
 				'selected_facilitator_id' => 'simple_x402_test',
 				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0xTest', 'default_price' => '0.01' ),
-					'coinbase_cdp'     => array( 'wallet_address' => '0xLive', 'default_price' => '0.10' ),
+					'simple_x402_test' => array( 'wallet_address' => '0xTest' ),
+					'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
 				),
 			)
 		);
 		$this->assertSame( '0xLive', $repo->wallet_address_for( 'coinbase_cdp' ) );
-		$this->assertSame( '0.10', $repo->default_price_for( 'coinbase_cdp' ) );
 	}
 
 	public function test_sanitize_reverts_negative_or_non_numeric_price_to_default(): void {
 		$repo = new SettingsRepository();
-		$repo->save(
-			array(
-				'selected_facilitator_id' => 'simple_x402_test',
-				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0x', 'default_price' => '-1' ),
-				),
-			)
-		);
+		$repo->save( array( 'default_price' => '-1' ) );
 		$this->assertSame( '0.01', $repo->default_price() );
 
-		$repo->save(
-			array(
-				'selected_facilitator_id' => 'simple_x402_test',
-				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0x', 'default_price' => 'free' ),
-				),
-			)
-		);
+		$repo->save( array( 'default_price' => 'free' ) );
 		$this->assertSame( '0.01', $repo->default_price() );
 	}
 
@@ -127,9 +105,9 @@ final class SettingsRepositoryTest extends TestCase {
 		$repo->save(
 			array(
 				'facilitators' => array(
-					'valid_id'        => array( 'wallet_address' => '0xA', 'default_price' => '0.01' ),
-					'Bad ID!'         => array( 'wallet_address' => '0xB', 'default_price' => '0.01' ),
-					'also/invalid'    => array( 'wallet_address' => '0xC', 'default_price' => '0.01' ),
+					'valid_id'     => array( 'wallet_address' => '0xA' ),
+					'Bad ID!'      => array( 'wallet_address' => '0xB' ),
+					'also/invalid' => array( 'wallet_address' => '0xC' ),
 				),
 			)
 		);
@@ -176,8 +154,9 @@ final class SettingsRepositoryTest extends TestCase {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'selected_facilitator_id'  => 'simple_x402_test',
 			'facilitators'             => array(
-				'simple_x402_test' => array( 'wallet_address' => '0xabc', 'default_price' => '0.50' ),
+				'simple_x402_test' => array( 'wallet_address' => '0xabc' ),
 			),
+			'default_price'            => '0.50',
 			'paywall_category_term_id' => 3,
 		);
 		$repo = new SettingsRepository();

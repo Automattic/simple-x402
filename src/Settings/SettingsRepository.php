@@ -13,12 +13,16 @@ namespace SimpleX402\Settings;
  * Thin wrapper around a single wp_options row.
  *
  * Schema:
+ *   - default_price:            Decimal USDC price per paywalled request.
+ *                               Global (not per-facilitator): the price you
+ *                               charge is a policy choice, independent of
+ *                               which network you're settling on.
  *   - selected_facilitator_id:  Connector ID dispatching verify/settle. '' means
  *                               no facilitator selected (paywall inert).
- *   - facilitators:             Map of connector_id → { wallet_address, default_price }.
+ *   - facilitators:             Map of connector_id → { wallet_address }.
  *                               Each registered facilitator remembers its own
- *                               wallet + price so swapping the picker recalls
- *                               whichever values were last configured for that one.
+ *                               wallet so swapping the picker recalls the one
+ *                               that was last configured for that network.
  *   - paywall_mode:             'none' | 'category' | 'all-posts'.
  *   - paywall_audience:         'everyone' | 'bots'.
  *   - paywall_category_term_id: term_id used in `category` mode.
@@ -60,10 +64,12 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Default price for the active facilitator, falling back to DEFAULT_PRICE.
+	 * Configured default price, falling back to DEFAULT_PRICE.
 	 */
 	public function default_price(): string {
-		return $this->default_price_for( $this->selected_facilitator_id() );
+		$stored = get_option( self::OPTION_NAME, array() );
+		$price  = isset( $stored['default_price'] ) ? (string) $stored['default_price'] : '';
+		return '' === $price ? self::DEFAULT_PRICE : $price;
 	}
 
 	/**
@@ -75,20 +81,11 @@ final class SettingsRepository {
 	}
 
 	/**
-	 * Price stored for a specific connector ID, or DEFAULT_PRICE if unset.
-	 */
-	public function default_price_for( string $facilitator_id ): string {
-		$slot  = $this->slot_for( $facilitator_id );
-		$price = (string) ( $slot['default_price'] ?? '' );
-		return '' === $price ? self::DEFAULT_PRICE : $price;
-	}
-
-	/**
 	 * Every stored facilitator slot, keyed by connector ID. Used by the
 	 * SettingsPage bootstrap so the React picker can swap values locally
 	 * without refetching.
 	 *
-	 * @return array<string,array{wallet_address:string,default_price:string}>
+	 * @return array<string,array{wallet_address:string}>
 	 */
 	public function facilitator_slots(): array {
 		$stored = get_option( self::OPTION_NAME, array() );
@@ -100,7 +97,6 @@ final class SettingsRepository {
 			}
 			$out[ (string) $id ] = array(
 				'wallet_address' => (string) ( $slot['wallet_address'] ?? '' ),
-				'default_price'  => (string) ( $slot['default_price'] ?? '' ),
 			);
 		}
 		return $out;
@@ -155,8 +151,10 @@ final class SettingsRepository {
 
 		$selected_facilitator_id = $this->sanitize_connector_id( $input['selected_facilitator_id'] ?? '' );
 		$facilitators            = $this->sanitize_facilitators( $input['facilitators'] ?? array() );
+		$price                   = $this->sanitize_price( $input['default_price'] ?? '' );
 
 		return array(
+			'default_price'            => $price,
 			'selected_facilitator_id'  => $selected_facilitator_id,
 			'facilitators'             => $facilitators,
 			'paywall_mode'             => $paywall_mode,
@@ -205,11 +203,11 @@ final class SettingsRepository {
 
 	/**
 	 * Canonicalise the submitted facilitators map. Unknown keys are dropped;
-	 * each slot is normalised to { wallet_address, default_price }. Invalid
-	 * connector IDs are filtered out.
+	 * each slot is normalised to { wallet_address }. Invalid connector IDs
+	 * are filtered out.
 	 *
 	 * @param mixed $raw Raw input (expected to be array<string,array>).
-	 * @return array<string,array{wallet_address:string,default_price:string}>
+	 * @return array<string,array{wallet_address:string}>
 	 */
 	private function sanitize_facilitators( mixed $raw ): array {
 		if ( ! is_array( $raw ) ) {
@@ -223,7 +221,6 @@ final class SettingsRepository {
 			}
 			$out[ $clean_id ] = array(
 				'wallet_address' => isset( $slot['wallet_address'] ) ? trim( (string) $slot['wallet_address'] ) : '',
-				'default_price'  => $this->sanitize_price( $slot['default_price'] ?? '' ),
 			);
 		}
 		return $out;

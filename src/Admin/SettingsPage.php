@@ -208,6 +208,7 @@ final class SettingsPage {
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),
 				'selected_facilitator_id'  => $this->settings->selected_facilitator_id(),
 				'facilitators'             => $this->settings->facilitator_slots(),
+				'default_price'            => $this->settings->default_price(),
 			),
 		);
 	}
