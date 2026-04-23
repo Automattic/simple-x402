@@ -9,14 +9,12 @@ declare(strict_types=1);
 
 namespace SimpleX402;
 
-use SimpleX402\Admin\OAuthRouter;
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Connectors\TestConnectorRegistrar;
-use SimpleX402\Connectors\WPComConnectorRegistrar;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
@@ -85,20 +83,10 @@ final class Plugin {
 			2
 		);
 
-		$wpcom_connector = new WPComConnectorRegistrar();
-		add_action( 'wp_connectors_init', $wpcom_connector );
-		add_filter(
-			'simple_x402_facilitator_for_connector',
-			array( $wpcom_connector, 'provide_facilitator' ),
-			10,
-			2
-		);
-
 		if ( is_admin() ) {
 			( new SettingsPage( $settings, $connectors ) )->register();
 			( new TestConnectionAjax( $resolver ) )->register();
 			( new SettingsAjax( $settings ) )->register();
-			( new OAuthRouter() )->register();
 		}
 
 		add_action(

@@ -132,7 +132,6 @@ final class SettingsPageTest extends TestCase {
 					'id'          => 'simple_x402_test',
 					'name'        => 'x402.org (Test network)',
 					'description' => 'Testnet',
-					'auth'        => array( 'method' => 'none' ),
 				),
 			),
 			$boot['facilitators']

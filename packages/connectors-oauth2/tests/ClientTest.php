@@ -4,12 +4,13 @@ declare(strict_types=1);
 namespace Automattic\Connectors\OAuth2\Tests;
 
 use Automattic\Connectors\OAuth2\Client;
+use Automattic\Connectors\OAuth2\Config;
 use PHPUnit\Framework\TestCase;
 
 final class ClientTest extends TestCase {
 
 	private const CONNECTOR_ID = 'example_oauth2';
-	private const SETTING      = 'connectors_example_oauth2_token';
+	private const SETTING      = 'connectors_oauth2_example_token';
 
 	protected function setUp(): void {
 		$GLOBALS['__sx402_connectors']  = array(
@@ -20,9 +21,6 @@ final class ClientTest extends TestCase {
 		$GLOBALS['__sx402_http_next']   = null;
 		$GLOBALS['__sx402_http_queue']  = array();
 		$GLOBALS['__sx402_http']        = null;
-
-		Client::reset_registry();
-		Client::register( self::CONNECTOR_ID, self::valid_extension() );
 	}
 
 	/** @return array<string,mixed> */
@@ -31,21 +29,15 @@ final class ClientTest extends TestCase {
 			'name'           => 'Example',
 			'type'           => 'example_type',
 			'authentication' => array(
-				'method'          => 'api_key',
+				'method'          => 'oauth2',
+				'authorize_url'   => 'https://provider.example/oauth2/authorize',
+				'token_url'       => 'https://provider.example/oauth2/token',
+				'client_id'       => 'my-app',
+				'scope'           => 'read write',
 				'setting_name'    => self::SETTING,
 				'credentials_url' => 'https://provider.example/account/apps',
 			),
 			'plugin'         => array( 'file' => 'test/plugin.php' ),
-		);
-	}
-
-	/** @return array<string,mixed> */
-	private static function valid_extension(): array {
-		return array(
-			'authorize_url' => 'https://provider.example/oauth2/authorize',
-			'token_url'     => 'https://provider.example/oauth2/token',
-			'client_id'     => 'my-app',
-			'scope'         => 'read write',
 		);
 	}
 
@@ -54,19 +46,13 @@ final class ClientTest extends TestCase {
 		$this->assertNull( Client::for_connector( self::CONNECTOR_ID ) );
 	}
 
-	public function test_for_connector_returns_null_when_extension_not_registered(): void {
-		Client::reset_registry();
+	public function test_for_connector_returns_null_for_non_oauth2_method(): void {
+		$GLOBALS['__sx402_connectors'][ self::CONNECTOR_ID ]['authentication']['method'] = 'api_key';
 		$this->assertNull( Client::for_connector( self::CONNECTOR_ID ) );
 	}
 
-	public function test_for_connector_returns_null_for_non_api_key_method(): void {
-		$GLOBALS['__sx402_connectors'][ self::CONNECTOR_ID ]['authentication']['method'] = 'none';
-		$this->assertNull( Client::for_connector( self::CONNECTOR_ID ) );
-	}
-
-	public function test_for_connector_returns_null_when_extension_incomplete(): void {
-		Client::reset_registry();
-		Client::register( self::CONNECTOR_ID, array( 'authorize_url' => 'https://a' ) );
+	public function test_for_connector_returns_null_when_required_field_missing(): void {
+		unset( $GLOBALS['__sx402_connectors'][ self::CONNECTOR_ID ]['authentication']['client_id'] );
 		$this->assertNull( Client::for_connector( self::CONNECTOR_ID ) );
 	}
 
@@ -116,6 +102,7 @@ final class ClientTest extends TestCase {
 		$this->assertSame( 'abc123', get_option( self::SETTING, '' ) );
 		$this->assertSame( 'https://provider.example/oauth2/token', $GLOBALS['__sx402_http']['url'] );
 
+		// Flow transient cleared so a replay fails.
 		$this->assertFalse( get_transient( 'conn_oauth2_flow_' . $query['state'] ) );
 	}
 

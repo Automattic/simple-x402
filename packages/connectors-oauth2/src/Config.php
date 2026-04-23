@@ -1,6 +1,6 @@
 <?php
 /**
- * Merged connector + OAuth2 supplement config.
+ * Typed view of a connector's oauth2 authentication block.
  *
  * @package Automattic\Connectors\OAuth2
  */
@@ -10,11 +10,10 @@ declare(strict_types=1);
 namespace Automattic\Connectors\OAuth2;
 
 /**
- * Combines the two sources a Client needs:
- *   - Connector registration (api_key method + setting_name + credentials_url).
- *   - OAuth2 supplement (authorize_url, token_url, client_id, scope).
- *
- * Returns null from the factory if either half is missing or malformed.
+ * Parses `$connector['authentication']` into a strongly-typed struct. Returns
+ * null from the factory if any required field is missing or malformed — the
+ * Client treats that as "this connector isn't usable," caller surfaces the
+ * failure however it sees fit.
  */
 final class Config {
 
@@ -28,27 +27,24 @@ final class Config {
 	) {}
 
 	/**
-	 * @param array<string,mixed> $connector Raw connector from wp_get_connector().
-	 * @param array<string,mixed> $extension OAuth supplement registered via Client::register().
+	 * Build a Config from a raw connector array. Returns null if the
+	 * authentication block is missing, not oauth2, or missing required
+	 * fields.
+	 *
+	 * @param array<string,mixed> $connector Raw connector data from wp_get_connector().
 	 */
-	public static function build( array $connector, array $extension ): ?self {
+	public static function from_connector( array $connector ): ?self {
 		$auth = $connector['authentication'] ?? null;
-		if ( ! is_array( $auth ) ) {
-			return null;
-		}
-		// Core only accepts api_key + none. OAuth tokens live behind api_key.
-		if ( 'api_key' !== ( $auth['method'] ?? '' ) ) {
-			return null;
-		}
-		$setting = (string) ( $auth['setting_name'] ?? '' );
-		if ( '' === $setting ) {
+		if ( ! is_array( $auth ) || Client::METHOD !== ( $auth['method'] ?? '' ) ) {
 			return null;
 		}
 
-		$authorize = (string) ( $extension['authorize_url'] ?? '' );
-		$token     = (string) ( $extension['token_url'] ?? '' );
-		$client    = (string) ( $extension['client_id'] ?? '' );
-		if ( '' === $authorize || '' === $token || '' === $client ) {
+		$authorize = (string) ( $auth['authorize_url'] ?? '' );
+		$token     = (string) ( $auth['token_url'] ?? '' );
+		$client    = (string) ( $auth['client_id'] ?? '' );
+		$setting   = (string) ( $auth['setting_name'] ?? '' );
+
+		if ( '' === $authorize || '' === $token || '' === $client || '' === $setting ) {
 			return null;
 		}
 		if ( ! preg_match( '#^https?://#i', $authorize ) || ! preg_match( '#^https?://#i', $token ) ) {
@@ -59,7 +55,7 @@ final class Config {
 			authorize_url: $authorize,
 			token_url: $token,
 			client_id: $client,
-			scope: (string) ( $extension['scope'] ?? '' ),
+			scope: (string) ( $auth['scope'] ?? '' ),
 			setting_name: $setting,
 			credentials_url: (string) ( $auth['credentials_url'] ?? '' ),
 		);

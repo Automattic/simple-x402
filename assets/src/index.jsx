@@ -311,12 +311,6 @@ function FacilitatorCard( { saved, save } ) {
 	const [ testing, setTesting ] = useState( false );
 	const { saving, error, run } = useSave();
 
-	const selectedMeta =
-		'' !== facilitator
-			? ( config.facilitators || [] ).find( ( f ) => f.id === facilitator )
-			: null;
-	const oauth = selectedMeta?.auth?.is_oauth ? selectedMeta.auth : null;
-
 	const slot = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
 	const savedSlot = '' === facilitator
 		? emptySlot()
@@ -393,28 +387,6 @@ function FacilitatorCard( { saved, save } ) {
 				/>
 				{ '' !== facilitator && (
 					<>
-						{ oauth && (
-							<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
-								{ oauth.is_connected ? (
-									<>
-										<Text size={ 13 } variant="muted">
-											{ __( '✓ Connected', 'simple-x402' ) }
-										</Text>
-										<Button variant="link" href={ oauth.disconnect_url }>
-											{ __( 'Disconnect', 'simple-x402' ) }
-										</Button>
-									</>
-								) : (
-									<Button variant="primary" href={ oauth.connect_url }>
-										{ sprintf(
-											/* translators: %s: facilitator name, e.g. "WordPress.com". */
-											__( 'Connect to %s', 'simple-x402' ),
-											selectedMeta?.name || __( 'provider', 'simple-x402' )
-										) }
-									</Button>
-								) }
-							</HStack>
-						) }
 						<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
 							<Button
 								variant="link"
