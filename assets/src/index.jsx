@@ -221,7 +221,7 @@ function PricingCard( { price, setPrice } ) {
 				<CardTitle
 					title={ __( 'Pricing', 'simple-x402' ) }
 					subtitle={ __(
-						'How much each paywalled request costs, in USDC. Charged the same whether you’re settling on testnet or mainnet.',
+						'How much each paywalled request costs, in USDC.',
 						'simple-x402'
 					) }
 				/>
