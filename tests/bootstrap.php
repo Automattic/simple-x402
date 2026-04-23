@@ -69,6 +69,12 @@ if ( ! function_exists( 'update_option' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'delete_option' ) ) {
+	function delete_option( string $name ): bool {
+		unset( $GLOBALS['__sx402_options'][ $name ] );
+		return true;
+	}
+}
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
 		public function __construct( public string $code = '', public string $message = '' ) {}
@@ -232,6 +238,12 @@ if ( ! function_exists( 'set_transient' ) ) {
 			'value'   => $value,
 			'expires' => $ttl > 0 ? time() + $ttl : 0,
 		);
+		return true;
+	}
+}
+if ( ! function_exists( 'delete_transient' ) ) {
+	function delete_transient( string $key ): bool {
+		unset( $GLOBALS['__sx402_transients'][ $key ] );
 		return true;
 	}
 }

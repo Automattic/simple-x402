@@ -1,0 +1,15 @@
+{
+  "name": "automattic/connectors-oauth2",
+  "description": "OAuth2 + PKCE helper for WordPress Connectors API registrations. Handles the connect flow, token storage, and bearer retrieval so plugins that register `authentication.method: oauth2` connectors don't reimplement the dance.",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": { "Automattic\\Connectors\\OAuth2\\": "src/" }
+  },
+  "autoload-dev": {
+    "psr-4": { "Automattic\\Connectors\\OAuth2\\Tests\\": "tests/" }
+  }
+}
