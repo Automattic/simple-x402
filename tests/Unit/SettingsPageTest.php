@@ -42,7 +42,7 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( array(), $GLOBALS['__sx402_enqueued_scripts'] );
 	}
 
-	public function test_sanitize_callback_returns_flat_shape_without_persisting(): void {
+	public function test_sanitize_callback_returns_nested_shape_without_persisting(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 		$page->register_settings();
 
@@ -50,16 +50,17 @@ final class SettingsPageTest extends TestCase {
 
 		$result = $callback(
 			array(
-				'wallet_address'           => '0xABC',
-				'default_price'            => '0.5',
 				'selected_facilitator_id'  => 'simple_x402_test',
+				'facilitators'             => array(
+					'simple_x402_test' => array( 'wallet_address' => '0xABC', 'default_price' => '0.5' ),
+				),
 				'paywall_category_term_id' => 2,
 			)
 		);
 
-		$this->assertSame( '0xABC', $result['wallet_address'] );
-		$this->assertSame( '0.5', $result['default_price'] );
 		$this->assertSame( 'simple_x402_test', $result['selected_facilitator_id'] );
+		$this->assertSame( '0xABC', $result['facilitators']['simple_x402_test']['wallet_address'] );
+		$this->assertSame( '0.5', $result['facilitators']['simple_x402_test']['default_price'] );
 		$this->assertSame( 'none', $result['paywall_mode'] );
 		$this->assertSame( 'bots', $result['paywall_audience'] );
 		$this->assertSame( 2, $result['paywall_category_term_id'] );
@@ -73,9 +74,15 @@ final class SettingsPageTest extends TestCase {
 		$page->register_settings();
 
 		$callback = $GLOBALS['__sx402_registered_settings'][ SettingsPage::GROUP ][ SettingsRepository::OPTION_NAME ]['sanitize_callback'];
-		$result   = $callback( array( 'default_price' => 'nope' ) );
+		$result   = $callback(
+			array(
+				'facilitators' => array(
+					'simple_x402_test' => array( 'default_price' => 'nope' ),
+				),
+			)
+		);
 
-		$this->assertSame( '0.01', $result['default_price'] );
+		$this->assertSame( '0.01', $result['facilitators']['simple_x402_test']['default_price'] );
 	}
 
 	public function test_render_emits_form_with_mount_point(): void {
@@ -91,9 +98,10 @@ final class SettingsPageTest extends TestCase {
 
 	public function test_bootstrap_data_exposes_values_categories_and_facilitators(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
-			'wallet_address'           => '0xabc',
-			'default_price'            => '0.05',
 			'selected_facilitator_id'  => 'simple_x402_test',
+			'facilitators'             => array(
+				'simple_x402_test' => array( 'wallet_address' => '0xabc', 'default_price' => '0.05' ),
+			),
 			'paywall_mode'             => 'category',
 			'paywall_category_term_id' => 2,
 		);
@@ -105,9 +113,11 @@ final class SettingsPageTest extends TestCase {
 
 		$boot = ( new SettingsPage( new SettingsRepository() ) )->bootstrap_data();
 
-		$this->assertSame( '0xabc', $boot['values']['wallet_address'] );
-		$this->assertSame( '0.05', $boot['values']['default_price'] );
 		$this->assertSame( 'simple_x402_test', $boot['values']['selected_facilitator_id'] );
+		$this->assertSame(
+			array( 'wallet_address' => '0xabc', 'default_price' => '0.05' ),
+			$boot['values']['facilitators']['simple_x402_test']
+		);
 		$this->assertSame( 2, $boot['values']['paywall_category_term_id'] );
 
 		$this->assertSame(

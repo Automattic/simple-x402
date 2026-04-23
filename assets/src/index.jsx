@@ -20,6 +20,10 @@ function name( field ) {
 	return `${ config.option }[${ field }]`;
 }
 
+function facilitatorField( facilitatorId, field ) {
+	return `${ config.option }[facilitators][${ facilitatorId }][${ field }]`;
+}
+
 function SaveFooter( { disabled = false } ) {
 	return (
 		<CardFooter className="simple-x402-page__card-footer">
@@ -281,11 +285,23 @@ const PAYMENT_FIELDS = [
 	},
 ];
 
-function PaymentCard( { values, setValues } ) {
-	const isDirty = ! isShallowEqual( values, {
-		wallet_address: config.values.wallet_address || '',
-		default_price:  config.values.default_price || '',
-	} );
+const emptySlot = () => ( { wallet_address: '', default_price: '' } );
+
+function PaymentCard( { facilitatorId, slots, setSlots } ) {
+	if ( '' === facilitatorId ) {
+		return null;
+	}
+	const values = slots[ facilitatorId ] ?? emptySlot();
+	const saved  = ( config.values.facilitators || {} )[ facilitatorId ] ?? emptySlot();
+	const isDirty = ! isShallowEqual( values, saved );
+
+	const onChange = ( edits ) => {
+		setSlots( {
+			...slots,
+			[ facilitatorId ]: { ...values, ...edits },
+		} );
+	};
+
 	return (
 		<Card>
 			<CardHeader>
@@ -305,10 +321,15 @@ function PaymentCard( { values, setValues } ) {
 						layout: { type: 'regular', labelPosition: 'top' },
 						fields: PAYMENT_FIELDS.map( ( f ) => f.id ),
 					} }
-					onChange={ ( edits ) => setValues( { ...values, ...edits } ) }
+					onChange={ onChange }
 				/>
-				<input type="hidden" name={ name( 'wallet_address' ) } value={ values.wallet_address || '' } />
-				<input type="hidden" name={ name( 'default_price' ) } value={ values.default_price || '' } />
+				{ /* Submit every known slot so unrelated facilitators' stored values aren't wiped on save. */ }
+				{ Object.entries( slots ).map( ( [ id, slot ] ) => (
+					<span key={ id }>
+						<input type="hidden" name={ facilitatorField( id, 'wallet_address' ) } value={ slot.wallet_address || '' } />
+						<input type="hidden" name={ facilitatorField( id, 'default_price' ) } value={ slot.default_price || '' } />
+					</span>
+				) ) }
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } />
 		</Card>
@@ -322,10 +343,7 @@ function SettingsApp() {
 	const [ audience, setAudience ] = useState( initial.paywall_audience );
 	const [ termId, setTermId ] = useState( initial.paywall_category_term_id );
 	const [ facilitator, setFacilitator ] = useState( initial.selected_facilitator_id || '' );
-	const [ payment, setPayment ] = useState( {
-		wallet_address: initial.wallet_address || '',
-		default_price:  initial.default_price || '',
-	} );
+	const [ slots, setSlots ] = useState( initial.facilitators || {} );
 
 	const noticesRef = useRef( null );
 	useEffect( () => {
@@ -367,7 +385,11 @@ function SettingsApp() {
 					setFacilitator={ setFacilitator }
 				/>
 
-				<PaymentCard values={ payment } setValues={ setPayment } />
+				<PaymentCard
+					facilitatorId={ facilitator }
+					slots={ slots }
+					setSlots={ setSlots }
+				/>
 			</VStack>
 		</div>
 	);

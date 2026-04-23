@@ -13,22 +13,18 @@ namespace SimpleX402\Settings;
  * Thin wrapper around a single wp_options row.
  *
  * Schema:
- *   - wallet_address:           Receiving wallet for the selected facilitator.
- *                               Network is decided by the facilitator itself.
- *   - default_price:            Decimal USDC price per paywalled request.
- *   - selected_facilitator_id:  Connector ID of the x402 facilitator to
- *                               dispatch verify/settle through. '' = none
- *                               selected; paywall is inert until a facilitator
- *                               is chosen and the wallet is entered.
- *   - paywall_mode:             'none' | 'category' | 'all-posts'. Picks which
- *                               posts get gated.
- *   - paywall_audience:         'everyone' | 'bots'. Who sees the paywall.
- *   - paywall_category_term_id: term_id of the category used in `category` mode.
+ *   - selected_facilitator_id:  Connector ID dispatching verify/settle. '' means
+ *                               no facilitator selected (paywall inert).
+ *   - facilitators:             Map of connector_id → { wallet_address, default_price }.
+ *                               Each registered facilitator remembers its own
+ *                               wallet + price so swapping the picker recalls
+ *                               whichever values were last configured for that one.
+ *   - paywall_mode:             'none' | 'category' | 'all-posts'.
+ *   - paywall_audience:         'everyone' | 'bots'.
+ *   - paywall_category_term_id: term_id used in `category` mode.
  *
  * Getters trust `sanitize()` as the only writer — they do not re-validate
- * stored values. Fresh installs return declared defaults; invalid data that
- * somehow lands in the option (external writes, DB corruption) passes through,
- * which surfaces bugs rather than silently masking them.
+ * stored values.
  */
 final class SettingsRepository {
 
@@ -57,26 +53,62 @@ final class SettingsRepository {
 	public function __construct() {}
 
 	/**
-	 * Configured receiving wallet, or '' if not set.
+	 * Wallet address for the active facilitator, or '' if unset / no facilitator.
 	 */
 	public function wallet_address(): string {
-		$stored = get_option( self::OPTION_NAME, array() );
-		return isset( $stored['wallet_address'] ) ? (string) $stored['wallet_address'] : '';
+		return $this->wallet_address_for( $this->selected_facilitator_id() );
 	}
 
 	/**
-	 * Configured default price, falling back to DEFAULT_PRICE.
+	 * Default price for the active facilitator, falling back to DEFAULT_PRICE.
 	 */
 	public function default_price(): string {
-		$stored = get_option( self::OPTION_NAME, array() );
-		$stored_price = isset( $stored['default_price'] ) ? (string) $stored['default_price'] : '';
-		return '' === $stored_price ? self::DEFAULT_PRICE : $stored_price;
+		return $this->default_price_for( $this->selected_facilitator_id() );
 	}
 
 	/**
-	 * ID of the x402 facilitator connector to dispatch verify/settle through.
-	 * Empty string (default) means no facilitator is selected; the paywall
-	 * sits inert until the site owner picks one.
+	 * Wallet address stored for a specific connector ID.
+	 */
+	public function wallet_address_for( string $facilitator_id ): string {
+		$slot = $this->slot_for( $facilitator_id );
+		return (string) ( $slot['wallet_address'] ?? '' );
+	}
+
+	/**
+	 * Price stored for a specific connector ID, or DEFAULT_PRICE if unset.
+	 */
+	public function default_price_for( string $facilitator_id ): string {
+		$slot  = $this->slot_for( $facilitator_id );
+		$price = (string) ( $slot['default_price'] ?? '' );
+		return '' === $price ? self::DEFAULT_PRICE : $price;
+	}
+
+	/**
+	 * Every stored facilitator slot, keyed by connector ID. Used by the
+	 * SettingsPage bootstrap so the React picker can swap values locally
+	 * without refetching.
+	 *
+	 * @return array<string,array{wallet_address:string,default_price:string}>
+	 */
+	public function facilitator_slots(): array {
+		$stored = get_option( self::OPTION_NAME, array() );
+		$slots  = is_array( $stored['facilitators'] ?? null ) ? $stored['facilitators'] : array();
+		$out    = array();
+		foreach ( $slots as $id => $slot ) {
+			if ( ! is_array( $slot ) ) {
+				continue;
+			}
+			$out[ (string) $id ] = array(
+				'wallet_address' => (string) ( $slot['wallet_address'] ?? '' ),
+				'default_price'  => (string) ( $slot['default_price'] ?? '' ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * ID of the x402 facilitator connector to dispatch through. Empty string
+	 * (default) means no facilitator is selected.
 	 */
 	public function selected_facilitator_id(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
@@ -121,18 +153,12 @@ final class SettingsRepository {
 			$term_id = $this->paywall_category_term_id();
 		}
 
-		// Connector IDs are constrained by the Connectors API to a-z0-9_-.
-		$selected_facilitator_id = isset( $input['selected_facilitator_id'] )
-			? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $input['selected_facilitator_id'] ) )
-			: '';
-
-		$wallet = isset( $input['wallet_address'] ) ? trim( (string) $input['wallet_address'] ) : '';
-		$price  = $this->sanitize_price( $input['default_price'] ?? '' );
+		$selected_facilitator_id = $this->sanitize_connector_id( $input['selected_facilitator_id'] ?? '' );
+		$facilitators            = $this->sanitize_facilitators( $input['facilitators'] ?? array() );
 
 		return array(
-			'wallet_address'           => $wallet,
-			'default_price'            => $price,
 			'selected_facilitator_id'  => $selected_facilitator_id,
+			'facilitators'             => $facilitators,
 			'paywall_mode'             => $paywall_mode,
 			'paywall_audience'         => $audience,
 			'paywall_category_term_id' => $term_id,
@@ -151,14 +177,56 @@ final class SettingsRepository {
 
 	/**
 	 * Replace just the paywall_category_term_id, preserving every other field.
-	 *
-	 * Deliberately bypasses sanitize(): callers reacting to an external taxonomy
-	 * event (e.g. the delete-term guard) must not wipe unknown fields.
 	 */
 	public function set_paywall_category_term_id( int $term_id ): void {
 		$stored                             = get_option( self::OPTION_NAME, array() );
 		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
+	}
+
+	/**
+	 * @return array<string,mixed>
+	 */
+	private function slot_for( string $facilitator_id ): array {
+		if ( '' === $facilitator_id ) {
+			return array();
+		}
+		$slots = $this->facilitator_slots();
+		return $slots[ $facilitator_id ] ?? array();
+	}
+
+	/**
+	 * Validate a connector ID against the Connectors API's a-z0-9_- rule.
+	 * Invalid characters are stripped; an all-invalid input becomes ''.
+	 */
+	private function sanitize_connector_id( mixed $raw ): string {
+		return (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $raw ) );
+	}
+
+	/**
+	 * Canonicalise the submitted facilitators map. Unknown keys are dropped;
+	 * each slot is normalised to { wallet_address, default_price }. Invalid
+	 * connector IDs are filtered out.
+	 *
+	 * @param mixed $raw Raw input (expected to be array<string,array>).
+	 * @return array<string,array{wallet_address:string,default_price:string}>
+	 */
+	private function sanitize_facilitators( mixed $raw ): array {
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $raw as $id => $slot ) {
+			$clean_id = $this->sanitize_connector_id( (string) $id );
+			if ( '' === $clean_id || ! is_array( $slot ) ) {
+				continue;
+			}
+			$out[ $clean_id ] = array(
+				'wallet_address' => isset( $slot['wallet_address'] ) ? trim( (string) $slot['wallet_address'] ) : '',
+				'default_price'  => $this->sanitize_price( $slot['default_price'] ?? '' ),
+			);
+		}
+		return $out;
 	}
 
 	private function sanitize_price( mixed $raw ): string {

@@ -207,8 +207,7 @@ final class SettingsPage {
 				'paywall_audience'         => $this->settings->paywall_audience(),
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),
 				'selected_facilitator_id'  => $this->settings->selected_facilitator_id(),
-				'wallet_address'           => $this->settings->wallet_address(),
-				'default_price'            => $this->settings->default_price(),
+				'facilitators'             => $this->settings->facilitator_slots(),
 			),
 		);
 	}
