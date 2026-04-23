@@ -69,6 +69,34 @@ final class JetpackFacilitatorTest extends TestCase {
 		$this->assertSame( 'server_exploded', $result['error'] );
 	}
 
+	public function test_oauth_token_error_includes_description_when_present(): void {
+		// WP.com's 401 shape for expired / revoked / invalid tokens — the
+		// OAuth-compliant `{error, error_description}`.
+		$GLOBALS['__sx402_jp_next'] = array(
+			'response' => array( 'code' => 401 ),
+			'body'     => '{"error":"invalid_token","error_description":"Invalid or expired access token"}',
+		);
+
+		$result = ( new JetpackFacilitator() )->verify( array(), array() );
+
+		$this->assertFalse( $result['isValid'] );
+		$this->assertSame( 'invalid_token: Invalid or expired access token', $result['error'] );
+	}
+
+	public function test_scope_error_uses_message_field(): void {
+		// WP.com's 403 shape for scope failures — different from the OAuth
+		// error convention, uses `{code, message}`.
+		$GLOBALS['__sx402_jp_next'] = array(
+			'response' => array( 'code' => 403 ),
+			'body'     => '{"code":"unauthorized","message":"Required scope: x402."}',
+		);
+
+		$result = ( new JetpackFacilitator() )->settle( array(), array() );
+
+		$this->assertFalse( $result['success'] );
+		$this->assertSame( 'Required scope: x402.', $result['error'] );
+	}
+
 	public function test_test_connection_probes_health_endpoint(): void {
 		$GLOBALS['__sx402_jp_next'] = array(
 			'response' => array( 'code' => 200 ),
@@ -78,8 +106,22 @@ final class JetpackFacilitatorTest extends TestCase {
 		$probe = ( new JetpackFacilitator() )->test_connection();
 
 		$this->assertTrue( $probe->ok );
+		$this->assertSame( 200, $probe->http_code );
 		$this->assertSame( '/x402/health', $GLOBALS['__sx402_jp']['path'] );
 		$this->assertSame( 'GET', $GLOBALS['__sx402_jp']['args']['method'] );
+	}
+
+	public function test_test_connection_preserves_http_code_on_failure(): void {
+		$GLOBALS['__sx402_jp_next'] = array(
+			'response' => array( 'code' => 404 ),
+			'body'     => '{}',
+		);
+
+		$probe = ( new JetpackFacilitator() )->test_connection();
+
+		$this->assertFalse( $probe->ok );
+		$this->assertSame( 404, $probe->http_code );
+		$this->assertSame( 'HTTP 404', $probe->error );
 	}
 
 	public function test_describe_returns_testnet_profile_for_now(): void {

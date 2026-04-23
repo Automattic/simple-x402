@@ -36,5 +36,9 @@ final class Plugin {
 			10,
 			2
 		);
+
+		if ( function_exists( 'is_admin' ) && is_admin() ) {
+			( new AdminNotice() )->register();
+		}
 	}
 }

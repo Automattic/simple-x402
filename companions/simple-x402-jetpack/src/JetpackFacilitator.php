@@ -77,12 +77,13 @@ final class JetpackFacilitator implements Facilitator {
 			return new TestResult(
 				ok: false,
 				error: $response['error'],
+				http_code: $response['http_code'],
 				duration_ms: $elapsed,
 			);
 		}
 		return new TestResult(
 			ok: true,
-			http_code: 200,
+			http_code: $response['http_code'] ?? 200,
 			duration_ms: $elapsed,
 		);
 	}
@@ -94,7 +95,7 @@ final class JetpackFacilitator implements Facilitator {
 	 * @param array<string,mixed>|null $body     JSON body (null for GET).
 	 * @param string                   $method   HTTP method.
 	 *
-	 * @return array{body:array<string,mixed>,error:?string}
+	 * @return array{body:array<string,mixed>,error:?string,http_code:?int}
 	 */
 	private function call( string $sub_path, ?array $body, string $method = 'POST' ): array {
 		$full_path = self::BASE_PATH . '/' . ltrim( $sub_path, '/' );
@@ -116,8 +117,9 @@ final class JetpackFacilitator implements Facilitator {
 		);
 		if ( is_wp_error( $raw ) ) {
 			return array(
-				'body'  => array(),
-				'error' => $raw->get_error_message(),
+				'body'      => array(),
+				'error'     => $raw->get_error_message(),
+				'http_code' => null,
 			);
 		}
 		$code   = wp_remote_retrieve_response_code( $raw );
@@ -127,13 +129,37 @@ final class JetpackFacilitator implements Facilitator {
 		}
 		if ( $code < 200 || $code >= 300 ) {
 			return array(
-				'body'  => $parsed,
-				'error' => $parsed['error'] ?? "HTTP {$code}",
+				'body'      => $parsed,
+				'error'     => self::format_error( $parsed, $code ),
+				'http_code' => $code,
 			);
 		}
 		return array(
-			'body'  => $parsed,
-			'error' => null,
+			'body'      => $parsed,
+			'error'     => null,
+			'http_code' => $code,
 		);
+	}
+
+	/**
+	 * WordPress.com serves two distinct error shapes, and callers have to
+	 * handle both:
+	 *   - OAuth-compliant token errors: `{error, error_description}` (HTTP 401)
+	 *   - wpcom-flavoured scope errors: `{code, message}` (HTTP 403)
+	 * Either may surface on protected routes; anything else falls back to
+	 * "HTTP $n" so we still report something actionable.
+	 *
+	 * @param array<string,mixed> $parsed
+	 */
+	private static function format_error( array $parsed, int $http_code ): string {
+		if ( isset( $parsed['error'] ) ) {
+			$code    = (string) $parsed['error'];
+			$message = isset( $parsed['error_description'] ) ? (string) $parsed['error_description'] : '';
+			return '' !== $message ? "{$code}: {$message}" : $code;
+		}
+		if ( isset( $parsed['message'] ) ) {
+			return (string) $parsed['message'];
+		}
+		return "HTTP {$http_code}";
 	}
 }
