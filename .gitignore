@@ -53,3 +53,5 @@ wp-config.php
 .DS_Store
 /scripts/node_modules/
 /.worktrees/
+/node_modules/
+/assets/build/

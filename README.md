@@ -18,7 +18,13 @@ MVP. Bots/API clients only — there is no human checkout UI.
 composer install
 composer test
 composer lint
+
+npm install
+npm run build      # production bundle for the admin UI
+npm start          # dev/watch
 ```
+
+The admin UI lives in `assets/src/index.jsx` and builds to `assets/build/`. The output is gitignored — run `npm run build` before packaging the plugin.
 
 ## Test client
 

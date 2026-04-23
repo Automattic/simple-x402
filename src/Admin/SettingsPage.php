@@ -15,12 +15,10 @@ use SimpleX402\Settings\SettingsRepository;
 /**
  * Settings → Simple x402 admin page.
  *
- * Sections:
- *  - Mode (test / live) + mode banner.
- *  - What to paywall: mode (category / all-posts) and the paywall category name.
- *  - Who to paywall: audience (everyone / bots / none).
- *  - Where to send the funds: per-mode wallet + price, and live-only
- *    facilitator URL + API key.
+ * Renders a mount point + JSON bootstrap; the React app in
+ * assets/build/admin/index.js handles the form UI. Form submission still
+ * uses the classic options.php POST flow, so the React inputs include
+ * hidden <input name="..."> fields with the values WP expects.
  */
 final class SettingsPage {
 
@@ -37,6 +35,18 @@ final class SettingsPage {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_filter( 'admin_body_class', array( $this, 'admin_body_class' ) );
+	}
+
+	/**
+	 * Tag <body> on our screen so the bundle CSS can override #wpcontent gutters.
+	 */
+	public function admin_body_class( string $classes ): string {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $screen && 'settings_page_' . self::MENU_SLUG === $screen->id ) {
+			$classes .= ' simple-x402-screen';
+		}
+		return $classes;
 	}
 
 	/**
@@ -46,20 +56,39 @@ final class SettingsPage {
 		if ( 'settings_page_' . self::MENU_SLUG !== $hook_suffix ) {
 			return;
 		}
+
+		$asset_path = SIMPLE_X402_DIR . 'assets/build/index.asset.php';
+		$asset      = file_exists( $asset_path )
+			? require $asset_path
+			: array(
+				'dependencies' => array(),
+				'version'      => SIMPLE_X402_VERSION,
+			);
+
 		wp_enqueue_script(
 			self::SCRIPT_HANDLE,
-			plugins_url( 'assets/js/admin-settings.js', SIMPLE_X402_FILE ),
-			array(),
-			SIMPLE_X402_VERSION,
+			plugins_url( 'assets/build/index.js', SIMPLE_X402_FILE ),
+			$asset['dependencies'],
+			$asset['version'],
 			true
 		);
+
+		wp_enqueue_style( 'wp-components' );
+
+		$style_path = SIMPLE_X402_DIR . 'assets/build/style-index.css';
+		if ( file_exists( $style_path ) ) {
+			wp_enqueue_style(
+				self::SCRIPT_HANDLE,
+				plugins_url( 'assets/build/style-index.css', SIMPLE_X402_FILE ),
+				array( 'wp-components' ),
+				$asset['version']
+			);
+		}
+
 		wp_localize_script(
 			self::SCRIPT_HANDLE,
 			'simpleX402Settings',
-			array(
-				'option'       => SettingsRepository::OPTION_NAME,
-				'modeCategory' => SettingsRepository::PAYWALL_MODE_CATEGORY,
-			)
+			$this->bootstrap_data()
 		);
 	}
 
@@ -77,7 +106,7 @@ final class SettingsPage {
 	}
 
 	/**
-	 * Register the single option that backs both fields.
+	 * Register the single option that backs the entire form.
 	 */
 	public function register_settings(): void {
 		register_setting(
@@ -92,248 +121,100 @@ final class SettingsPage {
 	}
 
 	/**
-	 * Render the settings form.
+	 * Render the settings page shell. The React app paints itself into #simple-x402-app.
 	 */
 	public function render(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$mode         = $this->settings->mode();
-		$paywall_mode = $this->settings->paywall_mode();
-		$audience     = $this->settings->paywall_audience();
-		$term_id      = $this->settings->paywall_category_term_id();
-		$test_profile = FacilitatorProfile::for_test();
-		$live_profile = FacilitatorProfile::for_live();
-		$option       = SettingsRepository::OPTION_NAME;
-		$test_prefix  = $option . '[' . FacilitatorProfile::MODE_TEST . ']';
-		$live_prefix  = $option . '[' . FacilitatorProfile::MODE_LIVE . ']';
-		$stored       = get_option( SettingsRepository::OPTION_NAME, array() );
-		$stored       = is_array( $stored ) ? $stored : array();
-		$test_block   = is_array( $stored[ FacilitatorProfile::MODE_TEST ] ?? null ) ? $stored[ FacilitatorProfile::MODE_TEST ] : array();
-		$live_block   = is_array( $stored[ FacilitatorProfile::MODE_LIVE ] ?? null ) ? $stored[ FacilitatorProfile::MODE_LIVE ] : array();
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Simple x402', 'simple-x402' ); ?></h1>
-			<form method="post" action="options.php">
+			<header class="simple-x402-page__header">
+				<h1 class="simple-x402-page__header-title">
+					<?php esc_html_e( 'Simple x402', 'simple-x402' ); ?>
+				</h1>
+				<p class="simple-x402-page__header-subtitle">
+					<?php esc_html_e(
+						'Configure how the x402 paywall protects your content and where payments go.',
+						'simple-x402'
+					); ?>
+				</p>
+			</header>
+			<form id="simple-x402-form" method="post" action="options.php">
 				<?php settings_fields( self::GROUP ); ?>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<?php esc_html_e( 'Which posts should be paywalled?', 'simple-x402' ); ?>
-						</th>
-						<td>
-							<fieldset>
-								<label>
-									<input
-										type="radio"
-										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
-										value="<?php echo esc_attr( SettingsRepository::PAYWALL_MODE_NONE ); ?>"
-										<?php checked( $paywall_mode, SettingsRepository::PAYWALL_MODE_NONE ); ?>
-									/>
-									<?php esc_html_e( 'No posts (paywall disabled)', 'simple-x402' ); ?>
-								</label><br />
-								<label>
-									<input
-										type="radio"
-										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
-										value="<?php echo esc_attr( SettingsRepository::PAYWALL_MODE_ALL_POSTS ); ?>"
-										<?php checked( $paywall_mode, SettingsRepository::PAYWALL_MODE_ALL_POSTS ); ?>
-									/>
-									<?php esc_html_e( 'Every published post', 'simple-x402' ); ?>
-								</label><br />
-								<label>
-									<input
-										type="radio"
-										name="<?php echo esc_attr( $option ); ?>[paywall_mode]"
-										value="<?php echo esc_attr( SettingsRepository::PAYWALL_MODE_CATEGORY ); ?>"
-										<?php checked( $paywall_mode, SettingsRepository::PAYWALL_MODE_CATEGORY ); ?>
-									/>
-									<?php esc_html_e( 'Only posts in a specific category:', 'simple-x402' ); ?>
-								</label>
-								<fieldset
-									id="sx402-category-wrap"
-									style="border:0; padding:0; margin: 6px 0 0 24px;"
-									<?php disabled( SettingsRepository::PAYWALL_MODE_CATEGORY === $paywall_mode, false ); ?>
-								>
-									<?php
-									echo (string) wp_dropdown_categories( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- generated by wp_dropdown_categories.
-										array(
-											'name'         => $option . '[paywall_category_term_id]',
-											'id'           => 'sx402-category',
-											'taxonomy'     => 'category',
-											'hide_empty'   => false,
-											'show_option_none' => false,
-											'selected'     => $term_id,
-											'hierarchical' => true,
-											'echo'         => 0,
-										)
-									);
-									?>
-								</fieldset>
-							</fieldset>
-						</td>
-					</tr>
-				</table>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<?php esc_html_e( 'Which visitors should see the paywall?', 'simple-x402' ); ?>
-						</th>
-						<td>
-							<fieldset>
-								<label>
-									<input
-										type="radio"
-										name="<?php echo esc_attr( $option ); ?>[paywall_audience]"
-										value="<?php echo esc_attr( SettingsRepository::AUDIENCE_EVERYONE ); ?>"
-										<?php checked( $audience, SettingsRepository::AUDIENCE_EVERYONE ); ?>
-									/>
-									<?php esc_html_e( 'Everyone (humans and bots)', 'simple-x402' ); ?>
-								</label><br />
-								<label>
-									<input
-										type="radio"
-										name="<?php echo esc_attr( $option ); ?>[paywall_audience]"
-										value="<?php echo esc_attr( SettingsRepository::AUDIENCE_BOTS ); ?>"
-										<?php checked( $audience, SettingsRepository::AUDIENCE_BOTS ); ?>
-									/>
-									<?php esc_html_e( 'Only detected bots and crawlers', 'simple-x402' ); ?>
-								</label>
-							</fieldset>
-						</td>
-					</tr>
-				</table>
-
-				<h2><?php esc_html_e( 'Payment details', 'simple-x402' ); ?></h2>
-
-					<div class="sx402-field">
-						<span class="sx402-field-label"><?php esc_html_e( 'Mode', 'simple-x402' ); ?></span>
-						<fieldset>
-							<label>
-								<input
-									type="radio"
-									name="<?php echo esc_attr( $option ); ?>[mode]"
-									value="<?php echo esc_attr( FacilitatorProfile::MODE_TEST ); ?>"
-									<?php checked( $mode, FacilitatorProfile::MODE_TEST ); ?>
-								/>
-								<?php echo esc_html( $test_profile->label ); ?>
-							</label>
-							<label style="margin-left:12px;">
-								<input
-									type="radio"
-									name="<?php echo esc_attr( $option ); ?>[mode]"
-									value="<?php echo esc_attr( FacilitatorProfile::MODE_LIVE ); ?>"
-									<?php checked( $mode, FacilitatorProfile::MODE_LIVE ); ?>
-								/>
-								<?php echo esc_html( $live_profile->label ); ?>
-							</label>
-						</fieldset>
-					</div>
-
-					<div class="sx402-mode-columns" style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
-						<div style="flex:1 1 320px; min-width:0;">
-							<h3><?php esc_html_e( 'Test settings', 'simple-x402' ); ?></h3>
-
-							<div class="sx402-field">
-								<label for="sx402-test-wallet" class="sx402-field-label">
-									<?php esc_html_e( 'Receiving wallet (Base Sepolia)', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $test_prefix . '[wallet_address]' ); ?>"
-									id="sx402-test-wallet"
-									type="text"
-									class="regular-text"
-									value="<?php echo esc_attr( (string) ( $test_block['wallet_address'] ?? '' ) ); ?>"
-								/>
-							</div>
-
-							<div class="sx402-field">
-								<label for="sx402-test-price" class="sx402-field-label">
-									<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $test_prefix . '[default_price]' ); ?>"
-									id="sx402-test-price"
-									type="text"
-									class="big-text"
-									value="<?php echo esc_attr( (string) ( $test_block['default_price'] ?? '' ) ); ?>"
-								/>
-							</div>
-						</div>
-
-						<div style="flex:1 1 320px; min-width:0;">
-							<h3><?php esc_html_e( 'Live settings', 'simple-x402' ); ?></h3>
-
-							<div class="sx402-field">
-								<label for="sx402-live-wallet" class="sx402-field-label">
-									<?php esc_html_e( 'Receiving wallet (Base mainnet)', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $live_prefix . '[wallet_address]' ); ?>"
-									id="sx402-live-wallet"
-									type="text"
-									class="regular-text"
-									value="<?php echo esc_attr( (string) ( $live_block['wallet_address'] ?? '' ) ); ?>"
-								/>
-							</div>
-
-							<div class="sx402-field">
-								<label for="sx402-live-price" class="sx402-field-label">
-									<?php esc_html_e( 'Price per request (USDC)', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $live_prefix . '[default_price]' ); ?>"
-									id="sx402-live-price"
-									type="text"
-									class="big-text"
-									value="<?php echo esc_attr( (string) ( $live_block['default_price'] ?? '' ) ); ?>"
-								/>
-							</div>
-
-							<div class="sx402-field">
-								<label for="sx402-live-facilitator-url" class="sx402-field-label">
-									<?php esc_html_e( 'Facilitator URL', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $live_prefix . '[facilitator_url]' ); ?>"
-									id="sx402-live-facilitator-url"
-									type="text"
-									class="regular-text"
-									value="<?php echo esc_attr( (string) ( $live_block['facilitator_url'] ?? '' ) ); ?>"
-									placeholder="<?php echo esc_attr( FacilitatorProfile::LIVE_FACILITATOR_URL_DEFAULT ); ?>"
-								/>
-								<p class="description">
-									<?php esc_html_e( 'Leave blank to use the Coinbase CDP default.', 'simple-x402' ); ?>
-								</p>
-							</div>
-
-							<div class="sx402-field">
-								<label for="sx402-live-facilitator-key" class="sx402-field-label">
-									<?php esc_html_e( 'Facilitator API key', 'simple-x402' ); ?>
-								</label>
-								<input
-									name="<?php echo esc_attr( $live_prefix . '[facilitator_api_key]' ); ?>"
-									id="sx402-live-facilitator-key"
-									type="password"
-									class="regular-text"
-									value="<?php echo esc_attr( (string) ( $live_block['facilitator_api_key'] ?? '' ) ); ?>"
-									autocomplete="new-password"
-								/>
-							</div>
-						</div>
-					</div>
-
-				<style>
-					.sx402-field { margin: 0 0 14px; }
-					.sx402-field-label { display: block; font-weight: 600; margin-bottom: 4px; }
-					.sx402-field .regular-text { width: 100%; max-width: 400px; }
-				</style>
-
-				<?php submit_button(); ?>
+				<div id="simple-x402-app"></div>
 			</form>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Build the JSON payload the React app reads on boot.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function bootstrap_data(): array {
+		$test_profile = FacilitatorProfile::for_test();
+		$live_profile = FacilitatorProfile::for_live();
+
+		$stored     = get_option( SettingsRepository::OPTION_NAME, array() );
+		$stored     = is_array( $stored ) ? $stored : array();
+		$test_block = is_array( $stored[ FacilitatorProfile::MODE_TEST ] ?? null ) ? $stored[ FacilitatorProfile::MODE_TEST ] : array();
+		$live_block = is_array( $stored[ FacilitatorProfile::MODE_LIVE ] ?? null ) ? $stored[ FacilitatorProfile::MODE_LIVE ] : array();
+
+		$categories = array_map(
+			static fn ( $term ): array => array(
+				'term_id' => (int) $term->term_id,
+				'name'    => (string) $term->name,
+			),
+			get_terms(
+				array(
+					'taxonomy'   => 'category',
+					'hide_empty' => false,
+				)
+			) ?: array()
+		);
+
+		return array(
+			'option' => SettingsRepository::OPTION_NAME,
+			'modes'  => array(
+				'paywall'     => array(
+					'none'     => SettingsRepository::PAYWALL_MODE_NONE,
+					'allPosts' => SettingsRepository::PAYWALL_MODE_ALL_POSTS,
+					'category' => SettingsRepository::PAYWALL_MODE_CATEGORY,
+				),
+				'audience'    => array(
+					'everyone' => SettingsRepository::AUDIENCE_EVERYONE,
+					'bots'     => SettingsRepository::AUDIENCE_BOTS,
+				),
+				'facilitator' => array(
+					'test' => FacilitatorProfile::MODE_TEST,
+					'live' => FacilitatorProfile::MODE_LIVE,
+				),
+			),
+			'labels' => array(
+				'testMode' => $test_profile->label,
+				'liveMode' => $live_profile->label,
+			),
+			'liveFacilitatorPlaceholder' => FacilitatorProfile::LIVE_FACILITATOR_URL_DEFAULT,
+			'categories'                 => $categories,
+			'modeCategory'               => SettingsRepository::PAYWALL_MODE_CATEGORY,
+			'values'                     => array(
+				'mode'                     => $this->settings->mode(),
+				'paywall_mode'             => $this->settings->paywall_mode(),
+				'paywall_audience'         => $this->settings->paywall_audience(),
+				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),
+				'test'                     => array(
+					'wallet_address' => (string) ( $test_block['wallet_address'] ?? '' ),
+					'default_price'  => (string) ( $test_block['default_price'] ?? '' ),
+				),
+				'live'                     => array(
+					'wallet_address'      => (string) ( $live_block['wallet_address'] ?? '' ),
+					'default_price'       => (string) ( $live_block['default_price'] ?? '' ),
+					'facilitator_url'     => (string) ( $live_block['facilitator_url'] ?? '' ),
+					'facilitator_api_key' => (string) ( $live_block['facilitator_api_key'] ?? '' ),
+				),
+			),
+		);
 	}
 }

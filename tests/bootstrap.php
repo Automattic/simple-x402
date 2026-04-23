@@ -9,6 +9,9 @@ if ( ! defined( 'SIMPLE_X402_FILE' ) ) {
 if ( ! defined( 'SIMPLE_X402_VERSION' ) ) {
 	define( 'SIMPLE_X402_VERSION', '0.0.0-test' );
 }
+if ( ! defined( 'SIMPLE_X402_DIR' ) ) {
+	define( 'SIMPLE_X402_DIR', dirname( __DIR__ ) . '/' );
+}
 
 if ( ! function_exists( '__' ) ) {
 	function __( string $text, string $domain = 'default' ): string {
@@ -321,6 +324,33 @@ if ( ! function_exists( 'wp_localize_script' ) ) {
 	function wp_localize_script( string $handle, string $object_name, array $data ): bool {
 		$GLOBALS['__sx402_localized_data'][ $handle ][ $object_name ] = $data;
 		return true;
+	}
+}
+if ( ! function_exists( 'wp_enqueue_style' ) ) {
+	function wp_enqueue_style( string $handle, string $src = '', array $deps = array(), $ver = false, string $media = 'all' ): bool {
+		$GLOBALS['__sx402_enqueued_styles'][ $handle ] = array(
+			'src'  => $src,
+			'deps' => $deps,
+			'ver'  => $ver,
+		);
+		return true;
+	}
+}
+if ( ! function_exists( 'get_terms' ) ) {
+	function get_terms( array $args = array() ): array {
+		$taxonomy = (string) ( $args['taxonomy'] ?? 'category' );
+		$out      = array();
+		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
+			if ( ( $row['taxonomy'] ?? '' ) !== $taxonomy ) {
+				continue;
+			}
+			$term           = new \stdClass();
+			$term->term_id  = (int) $row['term_id'];
+			$term->name     = (string) $row['name'];
+			$term->taxonomy = (string) $row['taxonomy'];
+			$out[]          = $term;
+		}
+		return $out;
 	}
 }
 if ( ! function_exists( 'wp_dropdown_categories' ) ) {
