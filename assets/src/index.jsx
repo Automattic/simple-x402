@@ -244,9 +244,9 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 					} }
 				/>
 				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
-				<HStack spacing={ 2 } justify="flex-start" style={ { marginTop: 12 } }>
+				<div className="simple-x402-page__field-help">
 					<Button
-						variant="secondary"
+						variant="link"
 						onClick={ runTest }
 						disabled={ ! testable || testing }
 						accessibleWhenDisabled
@@ -254,13 +254,13 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 						{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
 					</Button>
 					{ probe && (
-						<Text size={ 13 } variant="muted">
+						<Text size={ 12 } variant="muted">
 							{ probe.ok
 								? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
 								: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
 						</Text>
 					) }
-				</HStack>
+				</div>
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } />
 		</Card>

@@ -80,3 +80,18 @@ body.simple-x402-screen .components-card__header {
 body.simple-x402-screen .simple-x402-page__card-footer {
 	border-top: none;
 }
+
+// Link-style "Test connection" action tucked under the Facilitator field, in
+// the slot where WP-admin would normally put help text. The status message
+// sits inline next to the link so a failed probe is easy to spot.
+.simple-x402-page__field-help {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 4px;
+	font-size: 12px;
+
+	.components-button.is-link {
+		font-size: 12px;
+	}
+}
