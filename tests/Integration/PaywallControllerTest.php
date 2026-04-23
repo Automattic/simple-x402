@@ -4,6 +4,10 @@ declare(strict_types=1);
 namespace SimpleX402\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use SimpleX402\Connectors\ConnectorRegistry;
+use SimpleX402\Facilitator\Facilitator;
+use SimpleX402\Facilitator\FacilitatorResolver;
+use SimpleX402\Facilitator\TestResult;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\RuleResolver;
@@ -399,5 +403,101 @@ final class PaywallControllerTest extends TestCase {
 		$prop = new \ReflectionProperty( $obj::class, $name );
 		$prop->setAccessible( true );
 		return $prop->getValue( $obj );
+	}
+
+	public function test_uses_resolver_facilitator_when_selected_id_is_set(): void {
+		// Point the setting at a registered connector and wire our recording mock
+		// to the filter the resolver applies.
+		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = 'simple_x402_test';
+		$GLOBALS['__sx402_connectors']['simple_x402_test']                              = array(
+			'type' => ConnectorRegistry::FACILITATOR_TYPE,
+		);
+
+		$calls = array();
+		$mock  = new class($calls) implements Facilitator {
+			/** @param array<int,string> $calls */
+			public function __construct( private array &$calls ) {}
+			public function verify( array $r, array $p ): array {
+				$this->calls[] = 'verify';
+				return array( 'isValid' => true, 'error' => null, 'raw' => array() );
+			}
+			public function settle( array $r, array $p ): array {
+				$this->calls[] = 'settle';
+				return array( 'success' => true, 'transaction' => '0xmock', 'network' => 'test', 'error' => null, 'raw' => array() );
+			}
+			public function test_connection(): TestResult {
+				return new TestResult( ok: true );
+			}
+		};
+		add_filter(
+			FacilitatorResolver::FILTER,
+			fn ( $existing, $id ) => 'simple_x402_test' === $id ? $mock : $existing,
+			10,
+			2
+		);
+
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+
+		$controller = new PaywallController(
+			new RuleResolver(),
+			new GrantStore(),
+			new SettingsRepository(),
+			new FacilitatorResolver( new ConnectorRegistry() ),
+		);
+		$controller->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		// Resolver-backed facilitator received both calls; no HTTP request was made.
+		$this->assertSame( array( 'verify', 'settle' ), $calls );
+		$this->assertNull( $GLOBALS['__sx402_http'] );
+	}
+
+	public function test_falls_back_to_legacy_client_when_resolver_returns_null(): void {
+		// Setting points at an unregistered connector — resolver gives up, legacy
+		// X402FacilitatorClient takes over and the normal HTTP flow happens.
+		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = 'nonexistent';
+
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+		$GLOBALS['__sx402_http_queue'] = array(
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
+			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xlegacy"}' ),
+		);
+
+		$controller = new PaywallController(
+			new RuleResolver(),
+			new GrantStore(),
+			new SettingsRepository(),
+			new FacilitatorResolver( new ConnectorRegistry() ),
+		);
+		$controller->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		// Legacy HTTP client was used — this proves the fallback didn't short-circuit to 402.
+		$this->assertNotNull( $GLOBALS['__sx402_http'] );
+		$this->assertTrue( ( new GrantStore() )->has_grant( '0xbuyer', '/foo' ) );
 	}
 }

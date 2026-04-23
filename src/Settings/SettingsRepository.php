@@ -118,6 +118,18 @@ final class SettingsRepository {
 			: FacilitatorProfile::for_test();
 	}
 
+	/**
+	 * ID of the x402 facilitator connector to dispatch verify/settle through.
+	 *
+	 * Empty string (default) means "use the legacy mode-based FacilitatorProfile path."
+	 * A non-empty string is only honoured when it resolves to a registered
+	 * `x402_facilitator` connector; unresolved IDs fall back transparently.
+	 */
+	public function selected_facilitator_id(): string {
+		$stored = get_option( self::OPTION_NAME, array() );
+		return (string) ( $stored['selected_facilitator_id'] ?? '' );
+	}
+
 	public function paywall_mode(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
 		return $stored['paywall_mode'] ?? self::DEFAULT_PAYWALL_MODE;
@@ -186,6 +198,12 @@ final class SettingsRepository {
 			$term_id = $this->paywall_category_term_id();
 		}
 
+		// Connector IDs are constrained by the Connectors API to a-z0-9_-.
+		// Strip anything else; callers store a clean value or nothing.
+		$selected_facilitator_id = isset( $input['selected_facilitator_id'] )
+			? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $input['selected_facilitator_id'] ) )
+			: '';
+
 		return array(
 			'mode'                        => $mode,
 			FacilitatorProfile::MODE_TEST => $test_block,
@@ -193,6 +211,7 @@ final class SettingsRepository {
 			'paywall_mode'                => $paywall_mode,
 			'paywall_audience'            => $audience,
 			'paywall_category_term_id'    => $term_id,
+			'selected_facilitator_id'     => $selected_facilitator_id,
 		);
 	}
 

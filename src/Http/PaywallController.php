@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace SimpleX402\Http;
 
+use SimpleX402\Facilitator\Facilitator;
+use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
@@ -35,14 +37,15 @@ final class PaywallController {
 	 * paywall path don't pay for profile resolution (one filter firing + a
 	 * `get_option` pair for live mode).
 	 */
-	private ?FacilitatorProfile $profile            = null;
-	private ?PaymentRequirementsBuilder $builder    = null;
-	private ?X402FacilitatorClient $facilitator_svc = null;
+	private ?FacilitatorProfile $profile      = null;
+	private ?PaymentRequirementsBuilder $builder = null;
+	private ?Facilitator $facilitator_svc     = null;
 
 	public function __construct(
 		private readonly RuleResolver $rules,
 		private readonly GrantStore $grants,
-		private readonly SettingsRepository $settings
+		private readonly SettingsRepository $settings,
+		private readonly ?FacilitatorResolver $resolver = null,
 	) {}
 
 	private function profile(): FacilitatorProfile {
@@ -53,8 +56,26 @@ final class PaywallController {
 		return $this->builder ??= new PaymentRequirementsBuilder( $this->profile() );
 	}
 
-	private function facilitator(): X402FacilitatorClient {
-		return $this->facilitator_svc ??= new X402FacilitatorClient( $this->profile() );
+	/**
+	 * Resolve the active Facilitator. Preference order:
+	 *   1. Connector-backed client if a valid selected_facilitator_id is stored.
+	 *   2. Legacy mode-based X402FacilitatorClient built from FacilitatorProfile.
+	 *
+	 * The fallback preserves behaviour on installs that haven't adopted the
+	 * Connectors API picker yet.
+	 */
+	private function facilitator(): Facilitator {
+		if ( null !== $this->facilitator_svc ) {
+			return $this->facilitator_svc;
+		}
+		$id = $this->settings->selected_facilitator_id();
+		if ( '' !== $id && null !== $this->resolver ) {
+			$resolved = $this->resolver->resolve( $id );
+			if ( null !== $resolved ) {
+				return $this->facilitator_svc = $resolved;
+			}
+		}
+		return $this->facilitator_svc = new X402FacilitatorClient( $this->profile() );
 	}
 
 	/**

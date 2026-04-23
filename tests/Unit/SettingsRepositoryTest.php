@@ -134,6 +134,28 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 'none', $repo->paywall_mode() );
 	}
 
+	public function test_selected_facilitator_id_defaults_to_empty(): void {
+		$this->assertSame( '', ( new SettingsRepository() )->selected_facilitator_id() );
+	}
+
+	public function test_selected_facilitator_id_persists_through_sanitize(): void {
+		$repo = new SettingsRepository();
+		$repo->save( array( 'mode' => 'test', 'selected_facilitator_id' => 'simple_x402_test' ) );
+		$this->assertSame( 'simple_x402_test', $repo->selected_facilitator_id() );
+	}
+
+	public function test_selected_facilitator_id_strips_invalid_characters(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'mode'                    => 'test',
+				'selected_facilitator_id' => 'Simple/X402 Test!',
+			)
+		);
+		// Uppercase → lowercase; slash/space/exclamation stripped entirely.
+		$this->assertSame( 'simplex402test', $repo->selected_facilitator_id() );
+	}
+
 	public function test_sanitize_keeps_valid_term_id(): void {
 		$GLOBALS['__sx402_existing_terms'] = array(
 			array( 'term_id' => 42, 'name' => 'Premium', 'taxonomy' => 'category' ),

@@ -11,7 +11,9 @@ namespace SimpleX402;
 
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Connectors\TestConnectorRegistrar;
+use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
@@ -39,10 +41,13 @@ final class Plugin {
 		$notifier     = new SettingsChangeNotifier();
 		$settings     = new SettingsRepository( $notifier );
 		$rules        = new RuleResolver();
+		$connectors   = new ConnectorRegistry();
+		$resolver     = new FacilitatorResolver( $connectors );
 		$controller   = new PaywallController(
 			$rules,
 			new GrantStore(),
-			$settings
+			$settings,
+			$resolver,
 		);
 		$bots         = new BotDetector( self::current_user_agent() );
 		$default_rule = new DefaultPaywallRule( $settings, $bots );
