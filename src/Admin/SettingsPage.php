@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use SimpleX402\Admin\TestConnectionAjax;
+use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Settings\SettingsRepository;
 
@@ -26,7 +28,10 @@ final class SettingsPage {
 	public const GROUP         = 'simple_x402_settings_group';
 	public const SCRIPT_HANDLE = 'simple-x402-admin';
 
-	public function __construct( private readonly SettingsRepository $settings ) {}
+	public function __construct(
+		private readonly SettingsRepository $settings,
+		private readonly ConnectorRegistry $connectors = new ConnectorRegistry(),
+	) {}
 
 	/**
 	 * Attach hooks.
@@ -175,6 +180,16 @@ final class SettingsPage {
 			) ?: array()
 		);
 
+		$facilitators = array_map(
+			static fn ( string $id, array $c ): array => array(
+				'id'          => $id,
+				'name'        => (string) ( $c['name'] ?? $id ),
+				'description' => (string) ( $c['description'] ?? '' ),
+			),
+			array_keys( $this->connectors->facilitators() ),
+			array_values( $this->connectors->facilitators() )
+		);
+
 		return array(
 			'option' => SettingsRepository::OPTION_NAME,
 			'modes'  => array(
@@ -199,11 +214,18 @@ final class SettingsPage {
 			'liveFacilitatorPlaceholder' => FacilitatorProfile::LIVE_FACILITATOR_URL_DEFAULT,
 			'categories'                 => $categories,
 			'modeCategory'               => SettingsRepository::PAYWALL_MODE_CATEGORY,
+			'facilitators'               => $facilitators,
+			'testConnection'             => array(
+				'action'  => TestConnectionAjax::ACTION,
+				'nonce'   => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( TestConnectionAjax::NONCE ) : '',
+				'url'     => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
+			),
 			'values'                     => array(
 				'mode'                     => $this->settings->mode(),
 				'paywall_mode'             => $this->settings->paywall_mode(),
 				'paywall_audience'         => $this->settings->paywall_audience(),
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),
+				'selected_facilitator_id'  => $this->settings->selected_facilitator_id(),
 				'test'                     => array(
 					'wallet_address' => (string) ( $test_block['wallet_address'] ?? '' ),
 					'default_price'  => (string) ( $test_block['default_price'] ?? '' ),

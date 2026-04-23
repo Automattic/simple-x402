@@ -226,6 +226,110 @@ function ActiveBadge() {
 	);
 }
 
+const DEFAULT_FACILITATOR_VALUE = '';
+
+function facilitatorOptions() {
+	const entries = ( config.facilitators || [] ).map( ( f ) => ( {
+		value: f.id,
+		label: f.name || f.id,
+	} ) );
+	return [
+		{
+			value: DEFAULT_FACILITATOR_VALUE,
+			label: __( 'Default (use the mode-based settings below)', 'simple-x402' ),
+		},
+		...entries,
+	];
+}
+
+const FACILITATOR_FIELDS = [
+	{
+		id: 'facilitator',
+		label: __( 'Facilitator', 'simple-x402' ),
+		type: 'text',
+		Edit: 'select',
+		elements: facilitatorOptions(),
+	},
+];
+
+function FacilitatorCard( { facilitator, setFacilitator } ) {
+	const [ probe, setProbe ] = useState( null ); // { ok, http_code, duration_ms, error } | null
+	const [ testing, setTesting ] = useState( false );
+	const isDirty = facilitator !== ( config.values.selected_facilitator_id || '' );
+	const testable = Boolean( config.testConnection?.url ) && '' !== facilitator;
+
+	const runTest = async () => {
+		setTesting( true );
+		setProbe( null );
+		try {
+			const body = new FormData();
+			body.append( 'action', config.testConnection.action );
+			body.append( 'nonce', config.testConnection.nonce );
+			body.append( 'connector_id', facilitator );
+			const resp = await fetch( config.testConnection.url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				body,
+			} );
+			const json = await resp.json();
+			setProbe( json.success ? json.data : { ok: false, error: json.data?.error || 'request_failed' } );
+		} catch ( e ) {
+			setProbe( { ok: false, error: String( e ) } );
+		} finally {
+			setTesting( false );
+		}
+	};
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle
+					title={ __( 'Facilitator', 'simple-x402' ) }
+					subtitle={ __(
+						'Where verify and settle requests are sent. Leave on Default to keep the legacy mode-based path.',
+						'simple-x402'
+					) }
+				/>
+			</CardHeader>
+			<CardBody>
+				<DataForm
+					data={ { facilitator } }
+					fields={ FACILITATOR_FIELDS }
+					form={ {
+						layout: { type: 'regular', labelPosition: 'top' },
+						fields: [ 'facilitator' ],
+					} }
+					onChange={ ( edits ) => {
+						setFacilitator( edits.facilitator );
+						setProbe( null );
+					} }
+				/>
+				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
+				<HStack spacing={ 2 } justify="flex-start" style={ { marginTop: 12 } }>
+					<Button
+						variant="secondary"
+						onClick={ runTest }
+						disabled={ ! testable || testing }
+						accessibleWhenDisabled
+					>
+						{ testing
+							? __( 'Testing…', 'simple-x402' )
+							: __( 'Test connection', 'simple-x402' ) }
+					</Button>
+					{ probe && (
+						<Text size={ 13 } variant={ probe.ok ? 'muted' : 'muted' }>
+							{ probe.ok
+								? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
+								: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
+						</Text>
+					) }
+				</HStack>
+			</CardBody>
+			<SaveFooter disabled={ ! isDirty } />
+		</Card>
+	);
+}
+
 function PaymentDetailsCard( { mode, setMode } ) {
 	const isLive = mode === config.modes.facilitator.live;
 	const isDirty = mode !== config.values.mode;
@@ -340,6 +444,7 @@ function SettingsApp() {
 	const [ termId, setTermId ] = useState( initial.paywall_category_term_id );
 	const [ testValues, setTest ] = useState( initial.test );
 	const [ liveValues, setLive ] = useState( initial.live );
+	const [ facilitator, setFacilitator ] = useState( initial.selected_facilitator_id || '' );
 
 	const noticesRef = useRef( null );
 	useEffect( () => {
@@ -375,6 +480,11 @@ function SettingsApp() {
 				/>
 
 				<AudienceCard audience={ audience } setAudience={ setAudience } />
+
+				<FacilitatorCard
+					facilitator={ facilitator }
+					setFacilitator={ setFacilitator }
+				/>
 
 				<PaymentDetailsCard mode={ mode } setMode={ setMode } />
 

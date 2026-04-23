@@ -8,6 +8,7 @@ use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Facilitator\TestResult;
+use SimpleX402\Services\FacilitatorProfile;
 
 final class FacilitatorResolverTest extends TestCase {
 
@@ -53,6 +54,9 @@ final class FacilitatorResolverTest extends TestCase {
 			}
 			public function test_connection(): TestResult {
 				return new TestResult( ok: true );
+			}
+			public function describe(): FacilitatorProfile {
+				return FacilitatorProfile::for_test();
 			}
 		};
 		add_filter(

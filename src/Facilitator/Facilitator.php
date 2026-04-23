@@ -9,12 +9,23 @@ declare(strict_types=1);
 
 namespace SimpleX402\Facilitator;
 
+use SimpleX402\Services\FacilitatorProfile;
+
 /**
  * The plugin talks to facilitators (x402.org, Coinbase CDP, WP.com via
  * Jetpack, etc.) through this single interface. Connector authors return an
  * instance of this from the `simple_x402_facilitator_for_connector` filter.
  */
 interface Facilitator {
+
+	/**
+	 * Describe what network/asset/EIP-712 domain this facilitator operates on.
+	 * Drives PaymentRequirementsBuilder so every facilitator is the single
+	 * source of truth about its own environment — site owners only provide
+	 * wallet + price, never network-specific plumbing.
+	 */
+	public function describe(): FacilitatorProfile;
+
 
 	/**
 	 * Verify a payment payload against its requirements.

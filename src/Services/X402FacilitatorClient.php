@@ -28,6 +28,10 @@ final class X402FacilitatorClient implements Facilitator {
 
 	public function __construct( private readonly FacilitatorProfile $profile ) {}
 
+	public function describe(): FacilitatorProfile {
+		return $this->profile;
+	}
+
 	/**
 	 * Verify a payment payload against requirements.
 	 *

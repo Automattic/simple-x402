@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SimpleX402\Connectors\TestConnectorRegistrar;
 use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\TestResult;
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\X402FacilitatorClient;
 
 final class TestConnectorProvideFacilitatorTest extends TestCase {
@@ -28,6 +29,9 @@ final class TestConnectorProvideFacilitatorTest extends TestCase {
 			}
 			public function test_connection(): TestResult {
 				return new TestResult( ok: true );
+			}
+			public function describe(): FacilitatorProfile {
+				return FacilitatorProfile::for_test();
 			}
 		};
 

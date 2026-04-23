@@ -9,6 +9,7 @@ use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Facilitator\TestResult;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\X402HeaderCodec;
@@ -427,6 +428,9 @@ final class PaywallControllerTest extends TestCase {
 			}
 			public function test_connection(): TestResult {
 				return new TestResult( ok: true );
+			}
+			public function describe(): FacilitatorProfile {
+				return FacilitatorProfile::for_test();
 			}
 		};
 		add_filter(

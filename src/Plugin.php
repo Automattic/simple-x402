@@ -11,6 +11,7 @@ namespace SimpleX402;
 
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Connectors\TestConnectorRegistrar;
 use SimpleX402\Facilitator\FacilitatorResolver;
@@ -82,7 +83,8 @@ final class Plugin {
 		);
 
 		if ( is_admin() ) {
-			( new SettingsPage( $settings ) )->register();
+			( new SettingsPage( $settings, $connectors ) )->register();
+			( new TestConnectionAjax( $resolver ) )->register();
 		}
 
 		add_action(
