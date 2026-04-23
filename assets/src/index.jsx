@@ -373,7 +373,7 @@ function FacilitatorCard( { saved, save } ) {
 				<CardTitle
 					title={ __( 'Facilitator', 'simple-x402' ) }
 					subtitle={ __(
-						'Where verify and settle requests are sent, and where payments land. The paywall is inert until one is selected.',
+						'Where verify and settle requests are sent, and where payments land.',
 						'simple-x402'
 					) }
 				/>
