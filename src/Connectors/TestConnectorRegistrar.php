@@ -1,6 +1,6 @@
 <?php
 /**
- * Registers the local "test" x402 facilitator connector.
+ * Registers the built-in "Simple x402 (test)" facilitator connector.
  *
  * @package SimpleX402
  */
@@ -14,30 +14,24 @@ use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\X402FacilitatorClient;
 
 /**
- * Registers a `simple_x402_test` connector that points at the public
- * x402.org facilitator on Base Sepolia, so the plugin can exercise its
- * connector-selection path without a real facilitator account.
+ * Registers `simple_x402_test` — the out-of-the-box facilitator that routes
+ * through the public x402.org service on Base Sepolia. Every install gets it
+ * so the paywall is usable without any third-party plugin or signup; it's the
+ * "try the paywall on testnet" default.
  *
  * Also provides the `Facilitator` client for that connector ID via the
  * `simple_x402_facilitator_for_connector` filter — core strips unknown
  * fields from the registration payload, so the client mapping lives here
  * rather than in the connector metadata.
- *
- * Gated behind the `SIMPLE_X402_TEST_CONNECTOR` constant so production
- * sites never see it unless the operator explicitly opts in.
  */
 final class TestConnectorRegistrar {
 
 	public const ID = 'simple_x402_test';
 
 	/**
-	 * Hooked to `wp_connectors_init`. Skip if the test connector isn't
-	 * explicitly enabled for this install.
+	 * Hooked to `wp_connectors_init`.
 	 */
 	public function __invoke( \WP_Connector_Registry $registry ): void {
-		if ( ! ( defined( 'SIMPLE_X402_TEST_CONNECTOR' ) && \SIMPLE_X402_TEST_CONNECTOR ) ) {
-			return;
-		}
 		$registry->register( self::ID, self::payload() );
 	}
 
@@ -55,20 +49,19 @@ final class TestConnectorRegistrar {
 	}
 
 	/**
-	 * Registration payload for the test connector.
+	 * Registration payload.
 	 *
 	 * Core only preserves a fixed whitelist of fields (name, description,
-	 * type, authentication, plugin). x402-specific capabilities like endpoint
-	 * URL and supported networks are delivered separately through the
-	 * `simple_x402_facilitator_for_connector` filter — confirmed against
-	 * WordPress 7.0-RC2.
+	 * type, authentication, plugin). x402-specific capabilities are delivered
+	 * separately through the `simple_x402_facilitator_for_connector` filter —
+	 * confirmed against WordPress 7.0-RC2.
 	 *
 	 * @return array<string,mixed>
 	 */
 	public static function payload(): array {
 		return array(
 			'name'           => 'Simple x402 (test)',
-			'description'    => 'Local test facilitator. Routes through x402.org on Base Sepolia — no real funds move.',
+			'description'    => 'Built-in test facilitator. Routes through x402.org on Base Sepolia — no real funds move.',
 			'type'           => ConnectorRegistry::FACILITATOR_TYPE,
 			'authentication' => array( 'method' => 'none' ),
 			'plugin'         => array( 'file' => 'simple-x402/simple-x402.php' ),

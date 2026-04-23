@@ -26,17 +26,9 @@ final class TestConnectorRegistrarTest extends TestCase {
 		$this->assertSame( 'none', $payload['authentication']['method'] );
 	}
 
-	public function test_invoke_registers_connector_when_constant_is_enabled(): void {
-		if ( ! defined( 'SIMPLE_X402_TEST_CONNECTOR' ) ) {
-			define( 'SIMPLE_X402_TEST_CONNECTOR', true );
-		}
-		// Skip if a previous test run defined it as false — not re-definable.
-		if ( ! SIMPLE_X402_TEST_CONNECTOR ) {
-			$this->markTestSkipped( 'SIMPLE_X402_TEST_CONNECTOR was pre-defined to false.' );
-		}
-
-		$registry   = new \WP_Connector_Registry();
-		$registrar  = new TestConnectorRegistrar();
+	public function test_invoke_registers_the_built_in_connector(): void {
+		$registry  = new \WP_Connector_Registry();
+		$registrar = new TestConnectorRegistrar();
 		$registrar( $registry );
 
 		$this->assertTrue( $registry->is_registered( TestConnectorRegistrar::ID ) );

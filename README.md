@@ -79,9 +79,9 @@ Publishing a facilitator is a two-step contract:
 
 2. **Provide the client** through the `simple_x402_facilitator_for_connector` filter (planned — not yet wired). Since core strips unknown fields from the registration payload, x402-specific capabilities (endpoint URL, supported networks, fee-split support) are delivered here, not in the registration array. Returning a `Facilitator` instance for your connector ID is how the plugin learns how to call your backend.
 
-### Local test connector
+### Built-in x402.org connector
 
-Define `SIMPLE_X402_TEST_CONNECTOR` truthy in `wp-config.php` (or your dev env) to register a built-in `simple_x402_test` connector that routes through x402.org on Base Sepolia. It never appears on production unless explicitly opted in.
+Simple x402 ships with one connector out of the box: `simple_x402_test`, which routes through the public x402.org facilitator on Base Sepolia. It's the default "try the paywall on testnet" option and requires no credentials. Site owners pick it from the Facilitator dropdown in Settings → Simple x402 and enter a receiving wallet + price. Real facilitators (e.g. a Jetpack-backed one, a direct Coinbase CDP one) show up alongside it when those plugins are installed.
 
 ## Suggested improvements
 
