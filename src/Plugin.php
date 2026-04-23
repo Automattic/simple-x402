@@ -11,6 +11,7 @@ namespace SimpleX402;
 
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Connectors\TestConnectorRegistrar;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
@@ -65,6 +66,15 @@ final class Plugin {
 		// outside the plugin (e.g. via the Categories admin screen). Without
 		// this, the paywall silently disables itself.
 		add_action( 'delete_term', $guard, 10, 4 );
+
+		$test_connector = new TestConnectorRegistrar();
+		add_action( 'wp_connectors_init', $test_connector );
+		add_filter(
+			'simple_x402_facilitator_for_connector',
+			array( $test_connector, 'provide_facilitator' ),
+			10,
+			2
+		);
 
 		if ( is_admin() ) {
 			( new SettingsPage( $settings ) )->register();

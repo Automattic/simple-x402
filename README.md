@@ -57,6 +57,32 @@ Renaming the category in settings does not relabel existing posts — reassign t
 
 See the `simple_x402_rule_for_request` filter in `src/Services/RuleResolver.php`.
 
+## Facilitator connectors (WP 7.0+)
+
+Simple x402 discovers facilitator backends through the [WordPress 7.0 Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/). A facilitator is any external service that can `verify` and `settle` x402 payments — x402.org, a site's own Coinbase CDP account, WP.com via Jetpack, etc.
+
+Publishing a facilitator is a two-step contract:
+
+1. **Register the connector** on `wp_connectors_init`. The plugin claims the type string `x402_facilitator`. Core keeps a fixed whitelist of fields (`name`, `description`, `type`, `authentication`, `plugin`) and drops anything else, so the registration is credentials-and-metadata only.
+
+    ```php
+    add_action( 'wp_connectors_init', function ( WP_Connector_Registry $registry ) {
+        $registry->register( 'my_facilitator', array(
+            'name'           => 'My x402 facilitator',
+            'description'    => 'One-line marketing blurb.',
+            'type'           => 'x402_facilitator',
+            'authentication' => array( 'method' => 'api_key', 'setting_name' => 'my_key' ),
+            'plugin'         => array( 'file' => 'my-plugin/my-plugin.php' ),
+        ) );
+    } );
+    ```
+
+2. **Provide the client** through the `simple_x402_facilitator_for_connector` filter (planned — not yet wired). Since core strips unknown fields from the registration payload, x402-specific capabilities (endpoint URL, supported networks, fee-split support) are delivered here, not in the registration array. Returning a `Facilitator` instance for your connector ID is how the plugin learns how to call your backend.
+
+### Local test connector
+
+Define `SIMPLE_X402_TEST_CONNECTOR` truthy in `wp-config.php` (or your dev env) to register a built-in `simple_x402_test` connector that routes through x402.org on Base Sepolia. It never appears on production unless explicitly opted in.
+
 ## Suggested improvements
 
 - **Search-engine bots** — Today, detected crawlers get the same JSON 402 as other clients, which may hurt indexing. Consider treating verified search bots differently, e.g. returning `200` with a short excerpt, summary, or `meta description` in the body instead of a bare 402 (policy and implementation TBD).

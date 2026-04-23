@@ -89,4 +89,44 @@ final class X402FacilitatorClientTest extends TestCase {
 		$this->test_client()->verify( array(), array() );
 		$this->assertArrayNotHasKey( 'Authorization', $GLOBALS['__sx402_http']['args']['headers'] );
 	}
+
+	public function test_test_connection_hits_base_url_with_head(): void {
+		$GLOBALS['__sx402_http_next'] = array(
+			'response' => array( 'code' => 200 ),
+			'body'     => '',
+		);
+		$result = $this->test_client()->test_connection();
+
+		$this->assertSame( 'https://x402.org/facilitator/', $GLOBALS['__sx402_http']['url'] );
+		$this->assertSame( 'HEAD', $GLOBALS['__sx402_http']['method'] );
+		$this->assertTrue( $result->ok );
+		$this->assertSame( 200, $result->http_code );
+	}
+
+	public function test_test_connection_reports_wp_error_as_unreachable(): void {
+		$GLOBALS['__sx402_http_next'] = new \WP_Error( 'dns_fail', 'nope' );
+		$result = $this->test_client()->test_connection();
+		$this->assertFalse( $result->ok );
+		$this->assertSame( 'nope', $result->error );
+	}
+
+	public function test_test_connection_counts_5xx_as_down(): void {
+		$GLOBALS['__sx402_http_next'] = array(
+			'response' => array( 'code' => 502 ),
+			'body'     => '',
+		);
+		$result = $this->test_client()->test_connection();
+		$this->assertFalse( $result->ok );
+		$this->assertSame( 502, $result->http_code );
+	}
+
+	public function test_test_connection_treats_4xx_as_reachable(): void {
+		$GLOBALS['__sx402_http_next'] = array(
+			'response' => array( 'code' => 404 ),
+			'body'     => '',
+		);
+		$result = $this->test_client()->test_connection();
+		$this->assertTrue( $result->ok );
+		$this->assertSame( 404, $result->http_code );
+	}
 }

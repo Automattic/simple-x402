@@ -72,6 +72,9 @@ if ( ! function_exists( 'update_option' ) ) {
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
 		public function __construct( public string $code = '', public string $message = '' ) {}
+		public function get_error_message(): string {
+			return $this->message;
+		}
 	}
 }
 if ( ! function_exists( 'is_wp_error' ) ) {
@@ -90,6 +93,19 @@ if ( ! function_exists( 'wp_remote_post' ) ) {
 			return $next;
 		}
 		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+	}
+}
+if ( ! function_exists( 'wp_remote_head' ) ) {
+	function wp_remote_head( string $url, array $args = array() ) {
+		$GLOBALS['__sx402_http'] = array( 'url' => $url, 'args' => $args, 'method' => 'HEAD' );
+		if ( ! empty( $GLOBALS['__sx402_http_queue'] ) ) {
+			return array_shift( $GLOBALS['__sx402_http_queue'] );
+		}
+		$next = $GLOBALS['__sx402_http_next'] ?? null;
+		if ( $next instanceof \WP_Error ) {
+			return $next;
+		}
+		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '' );
 	}
 }
 if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
@@ -440,6 +456,54 @@ if ( ! class_exists( 'WP_Admin_Bar' ) ) {
 		}
 	}
 }
+if ( ! class_exists( 'WP_Connector_Registry' ) ) {
+	/**
+	 * Stand-in for WordPress 7.0's WP_Connector_Registry.
+	 *
+	 * Mirrors the public surface at
+	 * https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/.
+	 */
+	class WP_Connector_Registry {
+		public function register( string $id, array $args ): bool {
+			$GLOBALS['__sx402_connectors'][ $id ] = $args;
+			return true;
+		}
+
+		public function unregister( string $id ): ?array {
+			$prev = $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+			unset( $GLOBALS['__sx402_connectors'][ $id ] );
+			return $prev;
+		}
+
+		public function is_registered( string $id ): bool {
+			return isset( $GLOBALS['__sx402_connectors'][ $id ] );
+		}
+
+		public function get_registered( string $id ): ?array {
+			return $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+		}
+
+		/** @return array<string,array> */
+		public function get_all_registered(): array {
+			return $GLOBALS['__sx402_connectors'] ?? array();
+		}
+	}
+}
+if ( ! function_exists( 'wp_get_connectors' ) ) {
+	function wp_get_connectors(): array {
+		return $GLOBALS['__sx402_connectors'] ?? array();
+	}
+}
+if ( ! function_exists( 'wp_get_connector' ) ) {
+	function wp_get_connector( string $id ): ?array {
+		return $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+	}
+}
+if ( ! function_exists( 'wp_is_connector_registered' ) ) {
+	function wp_is_connector_registered( string $id ): bool {
+		return isset( $GLOBALS['__sx402_connectors'][ $id ] );
+	}
+}
 if ( ! class_exists( 'WP_Term' ) ) {
 	class WP_Term {
 		public int $term_id   = 0;
@@ -474,3 +538,4 @@ $GLOBALS['__sx402_options']    = array();
 $GLOBALS['__sx402_transients'] = array();
 $GLOBALS['__sx402_filters']    = array();
 $GLOBALS['__sx402_http']       = null;
+$GLOBALS['__sx402_connectors'] = array();
