@@ -174,6 +174,61 @@ final class SettingsRepository {
 	}
 
 	/**
+	 * Merge a partial input into the stored option. Only the keys present in
+	 * $partial are touched; everything else is preserved verbatim. Used by the
+	 * per-card AJAX save path so changes to one section don't wipe dirty or
+	 * clean values in another.
+	 *
+	 * For the nested `facilitators` map, slots are merged by connector ID —
+	 * submitting { simple_x402_test: {...} } leaves coinbase_cdp's slot
+	 * untouched.
+	 *
+	 * @param array $partial Raw input (subset of the full shape).
+	 * @return array The merged, persisted option row.
+	 */
+	public function update( array $partial ): array {
+		$stored = get_option( self::OPTION_NAME, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+		$merged = $stored;
+
+		if ( array_key_exists( 'default_price', $partial ) ) {
+			$merged['default_price'] = $this->sanitize_price( $partial['default_price'] );
+		}
+		if ( array_key_exists( 'selected_facilitator_id', $partial ) ) {
+			$merged['selected_facilitator_id'] = $this->sanitize_connector_id( $partial['selected_facilitator_id'] );
+		}
+		if ( array_key_exists( 'paywall_mode', $partial ) ) {
+			$mode = (string) $partial['paywall_mode'];
+			$merged['paywall_mode'] = in_array( $mode, self::VALID_PAYWALL_MODES, true )
+				? $mode
+				: self::DEFAULT_PAYWALL_MODE;
+		}
+		if ( array_key_exists( 'paywall_audience', $partial ) ) {
+			$audience = (string) $partial['paywall_audience'];
+			$merged['paywall_audience'] = in_array( $audience, self::VALID_AUDIENCES, true )
+				? $audience
+				: self::DEFAULT_AUDIENCE;
+		}
+		if ( array_key_exists( 'paywall_category_term_id', $partial ) ) {
+			$term_id = (int) $partial['paywall_category_term_id'];
+			if ( $term_id > 0 && term_exists( $term_id, 'category' ) ) {
+				$merged['paywall_category_term_id'] = $term_id;
+			}
+			// Invalid term: leave the stored value as-is.
+		}
+		if ( array_key_exists( 'facilitators', $partial ) && is_array( $partial['facilitators'] ) ) {
+			$existing_slots = is_array( $merged['facilitators'] ?? null ) ? $merged['facilitators'] : array();
+			foreach ( $this->sanitize_facilitators( $partial['facilitators'] ) as $id => $slot ) {
+				$existing_slots[ $id ] = $slot;
+			}
+			$merged['facilitators'] = $existing_slots;
+		}
+
+		update_option( self::OPTION_NAME, $merged );
+		return $merged;
+	}
+
+	/**
 	 * Replace just the paywall_category_term_id, preserving every other field.
 	 */
 	public function set_paywall_category_term_id( int $term_id ): void {

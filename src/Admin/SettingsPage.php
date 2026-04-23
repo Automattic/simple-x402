@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Settings\SettingsRepository;
@@ -144,10 +145,7 @@ final class SettingsPage {
 					); ?>
 				</p>
 			</header>
-			<form id="simple-x402-form" method="post" action="options.php">
-				<?php settings_fields( self::GROUP ); ?>
-				<div id="simple-x402-app"></div>
-			</form>
+			<div id="simple-x402-app"></div>
 		</div>
 		<?php
 	}
@@ -197,10 +195,14 @@ final class SettingsPage {
 			'categories'    => $categories,
 			'modeCategory'  => SettingsRepository::PAYWALL_MODE_CATEGORY,
 			'facilitators'  => $facilitators,
+			'ajaxUrl'        => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
 			'testConnection' => array(
 				'action' => TestConnectionAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( TestConnectionAjax::NONCE ) : '',
-				'url'    => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
+			),
+			'saveSettings'   => array(
+				'action' => SettingsAjax::ACTION,
+				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( SettingsAjax::NONCE ) : '',
 			),
 			'values' => array(
 				'paywall_mode'             => $this->settings->paywall_mode(),

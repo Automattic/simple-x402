@@ -16,21 +16,41 @@ import './style.scss';
 
 const config = window.simpleX402Settings;
 
-function name( field ) {
-	return `${ config.option }[${ field }]`;
+async function saveFields( partial ) {
+	const body = new FormData();
+	body.append( 'action', config.saveSettings.action );
+	body.append( 'nonce', config.saveSettings.nonce );
+	body.append( 'fields', JSON.stringify( partial ) );
+	const resp = await fetch( config.ajaxUrl, {
+		method: 'POST',
+		credentials: 'same-origin',
+		body,
+	} );
+	const json = await resp.json();
+	if ( ! json.success ) {
+		throw new Error( json.data?.error || 'save_failed' );
+	}
+	return json.data.values;
 }
 
-function facilitatorField( facilitatorId, field ) {
-	return `${ config.option }[facilitators][${ facilitatorId }][${ field }]`;
-}
-
-function SaveFooter( { disabled = false } ) {
+function SaveFooter( { disabled, saving, error, onSave } ) {
 	return (
 		<CardFooter className="simple-x402-page__card-footer">
-			<HStack justify="flex-start">
-				<Button variant="primary" type="submit" disabled={ disabled } accessibleWhenDisabled>
-					{ __( 'Save changes', 'simple-x402' ) }
+			<HStack spacing={ 3 } justify="flex-start">
+				<Button
+					variant="primary"
+					type="button"
+					onClick={ onSave }
+					disabled={ disabled || saving }
+					accessibleWhenDisabled
+				>
+					{ saving ? __( 'Saving…', 'simple-x402' ) : __( 'Save changes', 'simple-x402' ) }
 				</Button>
+				{ error && (
+					<Text size={ 13 } variant="muted">
+						{ `✗ ${ error }` }
+					</Text>
+				) }
 			</HStack>
 		</CardFooter>
 	);
@@ -45,6 +65,27 @@ const isShallowEqual = ( a, b ) => {
 	}
 	return true;
 };
+
+// Per-card save loop: wraps an async call with `saving`/`error` tracking.
+// The caller passes a function that returns a Promise; this hook runs it and
+// surfaces the status. Doesn't touch local state — the caller handles syncing
+// its own edits to the server response inside the callback.
+function useSave() {
+	const [ saving, setSaving ] = useState( false );
+	const [ error, setError ] = useState( null );
+	const run = async ( fn ) => {
+		setSaving( true );
+		setError( null );
+		try {
+			await fn();
+		} catch ( e ) {
+			setError( e instanceof Error ? e.message : String( e ) );
+		} finally {
+			setSaving( false );
+		}
+	};
+	return { saving, error, run };
+}
 
 function CardTitle( { title, subtitle } ) {
 	return (
@@ -86,15 +127,25 @@ const PAYWALL_MODE_FIELDS = [
 	},
 ];
 
-function PaywallScopeCard( { paywallMode, setPaywallMode, termId, setTermId } ) {
-	const data = { paywallMode, termId: String( termId ) };
-	const onChange = ( edits ) => {
-		if ( 'paywallMode' in edits ) setPaywallMode( edits.paywallMode );
-		if ( 'termId' in edits ) setTermId( Number( edits.termId ) );
-	};
+function PaywallScopeCard( { saved, save } ) {
+	const [ paywallMode, setPaywallMode ] = useState( saved.paywall_mode );
+	const [ termId, setTermId ] = useState( saved.paywall_category_term_id );
+	const { saving, error, run } = useSave();
+
 	const isDirty =
-		paywallMode !== config.values.paywall_mode ||
-		Number( termId ) !== Number( config.values.paywall_category_term_id );
+		paywallMode !== saved.paywall_mode ||
+		Number( termId ) !== Number( saved.paywall_category_term_id );
+
+	const onSave = () =>
+		run( async () => {
+			const merged = await save( {
+				paywall_mode: paywallMode,
+				paywall_category_term_id: termId,
+			} );
+			setPaywallMode( merged.paywall_mode );
+			setTermId( merged.paywall_category_term_id );
+		} );
+
 	return (
 		<Card>
 			<CardHeader>
@@ -105,28 +156,22 @@ function PaywallScopeCard( { paywallMode, setPaywallMode, termId, setTermId } ) 
 			</CardHeader>
 			<CardBody>
 				<DataForm
-					data={ data }
+					data={ { paywallMode, termId: String( termId ) } }
 					fields={ PAYWALL_MODE_FIELDS }
 					form={ {
 						layout: { type: 'regular', labelPosition: 'none' },
 						fields: [
 							'paywallMode',
-							{
-								id: 'termId',
-								layout: { type: 'regular', labelPosition: 'top' },
-							},
+							{ id: 'termId', layout: { type: 'regular', labelPosition: 'top' } },
 						],
 					} }
-					onChange={ onChange }
-				/>
-				<input type="hidden" name={ name( 'paywall_mode' ) } value={ paywallMode } />
-				<input
-					type="hidden"
-					name={ name( 'paywall_category_term_id' ) }
-					value={ termId }
+					onChange={ ( edits ) => {
+						if ( 'paywallMode' in edits ) setPaywallMode( edits.paywallMode );
+						if ( 'termId' in edits ) setTermId( Number( edits.termId ) );
+					} }
 				/>
 			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
+			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
 	);
 }
@@ -144,8 +189,17 @@ const AUDIENCE_FIELDS = [
 	},
 ];
 
-function AudienceCard( { audience, setAudience } ) {
-	const isDirty = audience !== config.values.paywall_audience;
+function AudienceCard( { saved, save } ) {
+	const [ audience, setAudience ] = useState( saved.paywall_audience );
+	const { saving, error, run } = useSave();
+	const isDirty = audience !== saved.paywall_audience;
+
+	const onSave = () =>
+		run( async () => {
+			const merged = await save( { paywall_audience: audience } );
+			setAudience( merged.paywall_audience );
+		} );
+
 	return (
 		<Card>
 			<CardHeader>
@@ -164,9 +218,57 @@ function AudienceCard( { audience, setAudience } ) {
 					} }
 					onChange={ ( edits ) => setAudience( edits.audience ) }
 				/>
-				<input type="hidden" name={ name( 'paywall_audience' ) } value={ audience } />
 			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
+			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
+		</Card>
+	);
+}
+
+const PRICING_FIELDS = [
+	{
+		id: 'default_price',
+		// USDC has 6 on-chain decimals, so prices down to 0.000001 are valid.
+		// A type='number' input would need a matching step attribute and
+		// would still reject pasted values that don't land on the grid; a
+		// plain text input lets site owners type any decimal and leans on
+		// the server sanitizer to reject non-numeric or non-positive input.
+		label: __( 'Price per request (USDC)', 'simple-x402' ),
+		type: 'text',
+		placeholder: '0.01',
+	},
+];
+
+function PricingCard( { saved, save } ) {
+	const [ price, setPrice ] = useState( saved.default_price || '' );
+	const { saving, error, run } = useSave();
+	const isDirty = String( price ?? '' ) !== String( saved.default_price ?? '' );
+
+	const onSave = () =>
+		run( async () => {
+			const merged = await save( { default_price: price } );
+			setPrice( merged.default_price );
+		} );
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle
+					title={ __( 'Pricing', 'simple-x402' ) }
+					subtitle={ __( 'How much each paywalled request costs, in USDC.', 'simple-x402' ) }
+				/>
+			</CardHeader>
+			<CardBody>
+				<DataForm
+					data={ { default_price: price } }
+					fields={ PRICING_FIELDS }
+					form={ {
+						layout: { type: 'regular', labelPosition: 'top' },
+						fields: [ 'default_price' ],
+					} }
+					onChange={ ( edits ) => setPrice( edits.default_price ) }
+				/>
+			</CardBody>
+			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
 	);
 }
@@ -177,10 +279,7 @@ function facilitatorOptions() {
 		label: f.name || f.id,
 	} ) );
 	return [
-		{
-			value: '',
-			label: __( '— Select a facilitator —', 'simple-x402' ),
-		},
+		{ value: '', label: __( '— Select a facilitator —', 'simple-x402' ) },
 		...entries,
 	];
 }
@@ -203,65 +302,24 @@ const WALLET_FIELDS = [
 	},
 ];
 
-const PRICING_FIELDS = [
-	{
-		id: 'default_price',
-		// USDC has 6 on-chain decimals, so prices down to 0.000001 are valid.
-		// A type='number' input would need a matching step attribute and
-		// would still reject pasted values that don't land on the grid; a
-		// plain text input lets site owners type any decimal and leans on
-		// the server sanitizer to reject non-numeric or non-positive input.
-		label: __( 'Price per request (USDC)', 'simple-x402' ),
-		type: 'text',
-		placeholder: '0.01',
-	},
-];
-
 const emptySlot = () => ( { wallet_address: '' } );
 
-function PricingCard( { price, setPrice } ) {
-	const isDirty = String( price ?? '' ) !== String( config.values.default_price ?? '' );
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle
-					title={ __( 'Pricing', 'simple-x402' ) }
-					subtitle={ __(
-						'How much each paywalled request costs, in USDC.',
-						'simple-x402'
-					) }
-				/>
-			</CardHeader>
-			<CardBody>
-				<DataForm
-					data={ { default_price: price } }
-					fields={ PRICING_FIELDS }
-					form={ {
-						layout: { type: 'regular', labelPosition: 'top' },
-						fields: [ 'default_price' ],
-					} }
-					onChange={ ( edits ) => setPrice( edits.default_price ) }
-				/>
-				<input type="hidden" name={ name( 'default_price' ) } value={ price || '' } />
-			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
-		</Card>
-	);
-}
-
-function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
+function FacilitatorCard( { saved, save } ) {
+	const [ facilitator, setFacilitator ] = useState( saved.selected_facilitator_id || '' );
+	const [ slots, setSlots ] = useState( saved.facilitators || {} );
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
+	const { saving, error, run } = useSave();
 
-	const slot   = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
-	const saved  = '' === facilitator
+	const slot = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
+	const savedSlot = '' === facilitator
 		? emptySlot()
-		: ( ( config.values.facilitators || {} )[ facilitator ] ?? emptySlot() );
-	const savedId = config.values.selected_facilitator_id || '';
+		: ( ( saved.facilitators || {} )[ facilitator ] ?? emptySlot() );
+	const savedId = saved.selected_facilitator_id || '';
 
 	const isDirty =
 		facilitator !== savedId ||
-		( '' !== facilitator && ! isShallowEqual( slot, saved ) );
+		( '' !== facilitator && ! isShallowEqual( slot, savedSlot ) );
 
 	const runTest = async () => {
 		setTesting( true );
@@ -271,7 +329,7 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 			body.append( 'action', config.testConnection.action );
 			body.append( 'nonce', config.testConnection.nonce );
 			body.append( 'connector_id', facilitator );
-			const resp = await fetch( config.testConnection.url, {
+			const resp = await fetch( config.ajaxUrl, {
 				method: 'POST',
 				credentials: 'same-origin',
 				body,
@@ -285,12 +343,23 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 		}
 	};
 
-	const onPaymentChange = ( edits ) => {
+	const onWalletChange = ( edits ) => {
 		setSlots( {
 			...slots,
 			[ facilitator ]: { ...slot, ...edits },
 		} );
 	};
+
+	const onSave = () =>
+		run( async () => {
+			const partial = { selected_facilitator_id: facilitator };
+			if ( '' !== facilitator ) {
+				partial.facilitators = { [ facilitator ]: slot };
+			}
+			const merged = await save( partial );
+			setFacilitator( merged.selected_facilitator_id || '' );
+			setSlots( merged.facilitators || {} );
+		} );
 
 	return (
 		<Card>
@@ -316,7 +385,6 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 						setProbe( null );
 					} }
 				/>
-				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
 				{ '' !== facilitator && (
 					<>
 						<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
@@ -349,34 +417,28 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 								layout: { type: 'regular', labelPosition: 'top' },
 								fields: WALLET_FIELDS.map( ( f ) => f.id ),
 							} }
-							onChange={ onPaymentChange }
+							onChange={ onWalletChange }
 						/>
 					</>
 				) }
-				{ /* Submit every known slot so unrelated facilitators' stored values aren't wiped on save. */ }
-				{ Object.entries( slots ).map( ( [ id, entry ] ) => (
-					<input
-						key={ id }
-						type="hidden"
-						name={ facilitatorField( id, 'wallet_address' ) }
-						value={ entry.wallet_address || '' }
-					/>
-				) ) }
 			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
+			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
 	);
 }
 
 function SettingsApp() {
-	const initial = config.values;
+	const [ saved, setSaved ] = useState( config.values );
 
-	const [ paywallMode, setPaywallMode ] = useState( initial.paywall_mode );
-	const [ audience, setAudience ] = useState( initial.paywall_audience );
-	const [ termId, setTermId ] = useState( initial.paywall_category_term_id );
-	const [ facilitator, setFacilitator ] = useState( initial.selected_facilitator_id || '' );
-	const [ slots, setSlots ] = useState( initial.facilitators || {} );
-	const [ price, setPrice ] = useState( initial.default_price || '' );
+	// Shared save engine. Fires one AJAX call, merges the server-canonical
+	// response into `saved` so every card's isDirty check is evaluated against
+	// whatever the sanitizer actually stored (which may differ from what we
+	// sent, e.g. bad prices → 0.01).
+	const save = async ( partial ) => {
+		const merged = await saveFields( partial );
+		setSaved( ( prev ) => ( { ...prev, ...merged } ) );
+		return merged;
+	};
 
 	const noticesRef = useRef( null );
 	useEffect( () => {
@@ -404,23 +466,10 @@ function SettingsApp() {
 		<div className="simple-x402-page__content">
 			<div className="simple-x402-page__notices" ref={ noticesRef } />
 			<VStack spacing={ 6 }>
-				<PaywallScopeCard
-					paywallMode={ paywallMode }
-					setPaywallMode={ setPaywallMode }
-					termId={ termId }
-					setTermId={ setTermId }
-				/>
-
-				<AudienceCard audience={ audience } setAudience={ setAudience } />
-
-				<PricingCard price={ price } setPrice={ setPrice } />
-
-				<FacilitatorCard
-					facilitator={ facilitator }
-					setFacilitator={ setFacilitator }
-					slots={ slots }
-					setSlots={ setSlots }
-				/>
+				<PaywallScopeCard saved={ saved } save={ save } />
+				<AudienceCard saved={ saved } save={ save } />
+				<PricingCard saved={ saved } save={ save } />
+				<FacilitatorCard saved={ saved } save={ save } />
 			</VStack>
 		</div>
 	);

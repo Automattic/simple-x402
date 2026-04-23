@@ -80,15 +80,16 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( '0.01', $result['default_price'] );
 	}
 
-	public function test_render_emits_form_with_mount_point(): void {
+	public function test_render_emits_react_mount_point(): void {
 		$page = new SettingsPage( new SettingsRepository() );
 
 		ob_start();
 		$page->render();
 		$html = (string) ob_get_clean();
 
-		$this->assertMatchesRegularExpression( '/<form[^>]*action="options\.php"/', $html );
 		$this->assertStringContainsString( 'id="simple-x402-app"', $html );
+		// Per-card AJAX saves, so no classic options.php form.
+		$this->assertStringNotContainsString( '<form', $html );
 	}
 
 	public function test_bootstrap_data_exposes_values_categories_and_facilitators(): void {

@@ -150,6 +150,64 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 7, $repo->paywall_category_term_id() );
 	}
 
+	public function test_update_only_touches_keys_present_in_the_partial(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'default_price'            => '0.05',
+			'selected_facilitator_id'  => 'simple_x402_test',
+			'facilitators'             => array(
+				'simple_x402_test' => array( 'wallet_address' => '0xTest' ),
+				'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
+			),
+			'paywall_mode'             => 'category',
+			'paywall_audience'         => 'bots',
+			'paywall_category_term_id' => 3,
+		);
+
+		$merged = ( new SettingsRepository() )->update( array( 'default_price' => '1.5' ) );
+
+		$this->assertSame( '1.5', $merged['default_price'] );
+		// Everything else unchanged.
+		$this->assertSame( 'simple_x402_test', $merged['selected_facilitator_id'] );
+		$this->assertSame( '0xTest', $merged['facilitators']['simple_x402_test']['wallet_address'] );
+		$this->assertSame( '0xLive', $merged['facilitators']['coinbase_cdp']['wallet_address'] );
+		$this->assertSame( 'category', $merged['paywall_mode'] );
+		$this->assertSame( 'bots', $merged['paywall_audience'] );
+		$this->assertSame( 3, $merged['paywall_category_term_id'] );
+	}
+
+	public function test_update_merges_facilitator_slots_by_id(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'facilitators' => array(
+				'simple_x402_test' => array( 'wallet_address' => '0xOld' ),
+				'coinbase_cdp'     => array( 'wallet_address' => '0xLive' ),
+			),
+		);
+
+		$merged = ( new SettingsRepository() )->update(
+			array(
+				'facilitators' => array(
+					'simple_x402_test' => array( 'wallet_address' => '0xNew' ),
+				),
+			)
+		);
+
+		// simple_x402_test overwritten, coinbase_cdp preserved.
+		$this->assertSame( '0xNew', $merged['facilitators']['simple_x402_test']['wallet_address'] );
+		$this->assertSame( '0xLive', $merged['facilitators']['coinbase_cdp']['wallet_address'] );
+	}
+
+	public function test_update_leaves_invalid_term_id_alone_instead_of_clobbering(): void {
+		$GLOBALS['__sx402_existing_terms'] = array(
+			array( 'term_id' => 5, 'name' => 'Valid', 'taxonomy' => 'category' ),
+		);
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'paywall_category_term_id' => 5,
+		);
+
+		$merged = ( new SettingsRepository() )->update( array( 'paywall_category_term_id' => 9999 ) );
+		$this->assertSame( 5, $merged['paywall_category_term_id'] );
+	}
+
 	public function test_set_paywall_category_term_id_preserves_other_fields(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'selected_facilitator_id'  => 'simple_x402_test',
