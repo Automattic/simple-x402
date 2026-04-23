@@ -44,7 +44,7 @@ function SaveFooter( { disabled, saving, error, onSave } ) {
 					disabled={ disabled || saving }
 					accessibleWhenDisabled
 				>
-					{ saving ? __( 'Saving…', 'simple-x402' ) : __( 'Save changes', 'simple-x402' ) }
+					{ saving ? __( 'Saving…', 'simple-x402' ) : __( 'Save', 'simple-x402' ) }
 				</Button>
 				{ error && (
 					<Text size={ 13 } variant="muted">
