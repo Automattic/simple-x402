@@ -10,26 +10,34 @@ declare(strict_types=1);
 namespace Automattic\Connectors\OAuth2;
 
 /**
- * Drive the OAuth2 Authorization Code + PKCE flow for a connector registered
- * with `authentication.method: oauth2`.
+ * Drive the OAuth2 Authorization Code + PKCE flow for a connector whose
+ * credential is stored via Core's `api_key` credential chain.
  *
- * Expected connector `authentication` block:
- *   - method:          'oauth2' (constant)
- *   - authorize_url:   provider's authorize endpoint
- *   - token_url:       provider's token endpoint
- *   - client_id:       public client identifier
- *   - scope:           space-delimited requested scopes (optional)
- *   - pkce:            bool (default true; only PKCE flows are supported today)
- *   - setting_name:    WP option / env var name where the access token lives
- *   - credentials_url: optional, shown to users for revocation
+ * Why not a first-class `authentication.method: oauth2`? Because WP 7.0's
+ * Connectors API silently rejects any method other than `api_key` or `none`.
+ * So we register the connector as `method: 'api_key'` + `setting_name: …`,
+ * and declare the OAuth2-specific params (authorize_url, token_url,
+ * client_id, …) separately through this library's own registry.
  *
- * Tokens are stored in the same env → PHP constant → DB option chain that
- * Core's Connectors API uses for api_key credentials. env/constant are read
- * only; writes only ever hit the DB option (they're inherently read-only).
+ * Usage:
+ *   1. Plugin registers the connector via `wp_connectors_init` with
+ *      `authentication.method = 'api_key'` and a `setting_name`.
+ *   2. Plugin registers the OAuth supplement at load time:
+ *        \Automattic\Connectors\OAuth2\Client::register( 'my_id', [
+ *            'authorize_url' => '…',
+ *            'token_url'     => '…',
+ *            'client_id'     => '…',
+ *            'scope'         => 'optional',
+ *        ] );
+ *   3. Plugin calls `Client::for_connector( 'my_id' )` to drive the flow.
+ *
+ * The `setting_name` on the connector is the join key — both core's
+ * credential chain and this library read/write through it.
  */
 final class Client {
 
-	public const METHOD = 'oauth2';
+	/** @var array<string,array<string,mixed>> Connector ID → OAuth2 supplement. */
+	private static array $extensions = array();
 
 	/** Transient prefix for per-flow PKCE verifier lookups. */
 	private const FLOW_PREFIX = 'conn_oauth2_flow_';
@@ -43,11 +51,31 @@ final class Client {
 	) {}
 
 	/**
+	 * Register the OAuth2-specific params for a connector ID. Required before
+	 * `for_connector()` can return a Client for that ID. Expected keys:
+	 *   - authorize_url (required)
+	 *   - token_url     (required)
+	 *   - client_id     (required)
+	 *   - scope         (optional)
+	 *
+	 * @param array<string,mixed> $extension
+	 */
+	public static function register( string $connector_id, array $extension ): void {
+		self::$extensions[ $connector_id ] = $extension;
+	}
+
+	/** Discard registrations — used by tests. */
+	public static function reset_registry(): void {
+		self::$extensions = array();
+	}
+
+	/**
 	 * Load a configured Client for the given connector ID.
 	 *
-	 * Reads the connector via `wp_get_connector()`, parses and validates its
-	 * oauth2 authentication block. Returns null if the connector doesn't
-	 * exist, isn't oauth2-flavoured, or its config is malformed.
+	 * Returns null if:
+	 *   - The connector isn't registered, or
+	 *   - The connector's authentication isn't `api_key` with a `setting_name`, or
+	 *   - No OAuth2 extension has been registered for this ID.
 	 */
 	public static function for_connector( string $connector_id ): ?self {
 		if ( ! function_exists( 'wp_get_connector' ) ) {
@@ -57,7 +85,11 @@ final class Client {
 		if ( ! is_array( $connector ) ) {
 			return null;
 		}
-		$config = Config::from_connector( $connector );
+		$extension = self::$extensions[ $connector_id ] ?? null;
+		if ( null === $extension ) {
+			return null;
+		}
+		$config = Config::build( $connector, $extension );
 		if ( null === $config ) {
 			return null;
 		}
@@ -105,9 +137,6 @@ final class Client {
 	 * Handle the `?code=…&state=…` callback from the provider. Validates
 	 * state, exchanges the code at the token endpoint, and persists the
 	 * access token under the connector's `setting_name`.
-	 *
-	 * Returns the access token on success; throws on any error so callers
-	 * can surface a clear failure to the user.
 	 */
 	public function handle_callback( string $code, string $state ): string {
 		if ( '' === $code || '' === $state ) {
@@ -159,8 +188,7 @@ final class Client {
 	}
 
 	/**
-	 * Current access token if one is stored, or '' otherwise. Reads through
-	 * env → constant → DB option, matching Core's api_key resolution chain.
+	 * Current access token, or '' if none. env → constant → DB option.
 	 */
 	public function bearer_token(): string {
 		$env = getenv( strtoupper( $this->config->setting_name ) );
@@ -178,11 +206,6 @@ final class Client {
 		return '' !== $this->bearer_token();
 	}
 
-	/**
-	 * Clear the stored access token so the site is "disconnected." Doesn't
-	 * attempt to revoke on the provider side — the user does that via the
-	 * provider's own UI (we can surface the link via Config::credentials_url).
-	 */
 	public function revoke(): void {
 		delete_option( $this->config->setting_name );
 	}

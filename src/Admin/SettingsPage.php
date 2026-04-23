@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use Automattic\Connectors\OAuth2\Client as OAuth2Client;
+use SimpleX402\Admin\OAuthRouter;
 use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
@@ -155,6 +157,32 @@ final class SettingsPage {
 	 *
 	 * @return array<string,mixed>
 	 */
+	/**
+	 * Per-connector auth metadata for the React picker. For `oauth2` connectors
+	 * this includes the live is_connected state plus the connect/disconnect
+	 * URLs the Connect button will target.
+	 *
+	 * @param array<string,mixed> $connector Raw connector data.
+	 * @return array<string,mixed>
+	 */
+	private function describe_auth( string $id, array $connector ): array {
+		$method = (string) ( $connector['authentication']['method'] ?? 'none' );
+		$auth   = array( 'method' => $method );
+
+		// A connector with method=api_key is "OAuth-backed" when our OAuth2
+		// library has a supplement registered for its ID. For_connector()
+		// returns a Client only when both pieces are present.
+		$client = OAuth2Client::for_connector( $id );
+		if ( null !== $client ) {
+			$auth['is_oauth']        = true;
+			$auth['is_connected']    = $client->is_connected();
+			$auth['connect_url']     = OAuthRouter::connect_url( $id );
+			$auth['disconnect_url']  = OAuthRouter::disconnect_url( $id );
+			$auth['credentials_url'] = (string) ( $connector['authentication']['credentials_url'] ?? '' );
+		}
+		return $auth;
+	}
+
 	public function bootstrap_data(): array {
 		$categories = array_map(
 			static fn ( $term ): array => array(
@@ -169,15 +197,15 @@ final class SettingsPage {
 			) ?: array()
 		);
 
-		$facilitators = array_map(
-			static fn ( string $id, array $c ): array => array(
+		$facilitators = array();
+		foreach ( $this->connectors->facilitators() as $id => $c ) {
+			$facilitators[] = array(
 				'id'          => $id,
 				'name'        => (string) ( $c['name'] ?? $id ),
 				'description' => (string) ( $c['description'] ?? '' ),
-			),
-			array_keys( $this->connectors->facilitators() ),
-			array_values( $this->connectors->facilitators() )
-		);
+				'auth'        => $this->describe_auth( $id, $c ),
+			);
+		}
 
 		return array(
 			'option' => SettingsRepository::OPTION_NAME,
