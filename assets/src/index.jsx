@@ -280,7 +280,7 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
 				{ '' !== facilitator && (
 					<>
-						<div className="simple-x402-page__field-help">
+						<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
 							<Button
 								variant="link"
 								type="button"
@@ -291,13 +291,13 @@ function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 								{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
 							</Button>
 							{ probe && (
-								<Text size={ 12 } variant="muted">
+								<Text size={ 13 } variant="muted">
 									{ probe.ok
 										? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
 										: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
 								</Text>
 							) }
-						</div>
+						</HStack>
 						<div className="simple-x402-page__divider" />
 						<DataForm
 							data={ slot }
