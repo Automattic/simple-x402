@@ -175,6 +175,40 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( 3, $merged['paywall_category_term_id'] );
 	}
 
+	public function test_update_resanitises_existing_slots_so_historical_junk_is_dropped(): void {
+		// Simulate a stored option that picked up extra keys from a past
+		// schema or a bad external write. After update(), the merged row
+		// should only contain the sanitised shape.
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'facilitators' => array(
+				'simple_x402_test' => array(
+					'wallet_address'       => '0xOld',
+					'default_price'        => '0.01',       // retired field
+					'legacy_facilitator_url' => 'https://' , // unknown junk
+				),
+			),
+		);
+
+		$merged = ( new SettingsRepository() )->update(
+			array(
+				'facilitators' => array(
+					'coinbase_cdp' => array( 'wallet_address' => '0xNew' ),
+				),
+			)
+		);
+
+		// Existing slot preserved, but only with the canonical key.
+		$this->assertSame(
+			array( 'wallet_address' => '0xOld' ),
+			$merged['facilitators']['simple_x402_test']
+		);
+		// New slot also normalised.
+		$this->assertSame(
+			array( 'wallet_address' => '0xNew' ),
+			$merged['facilitators']['coinbase_cdp']
+		);
+	}
+
 	public function test_update_merges_facilitator_slots_by_id(): void {
 		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'facilitators' => array(

@@ -34,6 +34,7 @@ final class SettingsAjax {
 	public function handle(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'error' => 'forbidden' ), 403 );
+			return;
 		}
 		check_ajax_referer( self::NONCE, 'nonce' );
 
@@ -43,6 +44,7 @@ final class SettingsAjax {
 		$decoded = json_decode( $raw, true );
 		if ( ! is_array( $decoded ) ) {
 			wp_send_json_error( array( 'error' => 'invalid_fields' ), 400 );
+			return;
 		}
 
 		$merged = $this->settings->update( $decoded );

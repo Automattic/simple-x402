@@ -26,9 +26,17 @@ async function saveFields( partial ) {
 		credentials: 'same-origin',
 		body,
 	} );
-	const json = await resp.json();
-	if ( ! json.success ) {
-		throw new Error( json.data?.error || 'save_failed' );
+	// A reverse-proxy or PHP fatal returns an HTML page, not JSON. Parse
+	// defensively so the UI surfaces a clean "save_failed_http_502" instead
+	// of a raw SyntaxError.
+	let json = null;
+	try {
+		json = await resp.json();
+	} catch ( _ ) {
+		throw new Error( `save_failed_http_${ resp.status }` );
+	}
+	if ( ! resp.ok || ! json?.success ) {
+		throw new Error( json?.data?.error || `save_failed_http_${ resp.status }` );
 	}
 	return json.data.values;
 }
@@ -309,6 +317,11 @@ function FacilitatorCard( { saved, save } ) {
 	const [ slots, setSlots ] = useState( saved.facilitators || {} );
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
+	// Every new probe bumps this ref; late-arriving fetches check it and
+	// drop their result if the user changed the picker or started a new
+	// probe in the meantime. Without this, switching facilitators mid-probe
+	// could paint a stale "✓ Succeeded" against the wrong option.
+	const probeRequestId = useRef( 0 );
 	const { saving, error, run } = useSave();
 
 	const slot = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
@@ -322,6 +335,7 @@ function FacilitatorCard( { saved, save } ) {
 		( '' !== facilitator && ! isShallowEqual( slot, savedSlot ) );
 
 	const runTest = async () => {
+		const requestId = ++probeRequestId.current;
 		setTesting( true );
 		setProbe( null );
 		try {
@@ -335,11 +349,13 @@ function FacilitatorCard( { saved, save } ) {
 				body,
 			} );
 			const json = await resp.json();
+			if ( requestId !== probeRequestId.current ) return;
 			setProbe( json.success ? json.data : { ok: false, error: json.data?.error || 'request_failed' } );
 		} catch ( e ) {
+			if ( requestId !== probeRequestId.current ) return;
 			setProbe( { ok: false, error: String( e ) } );
 		} finally {
-			setTesting( false );
+			if ( requestId === probeRequestId.current ) setTesting( false );
 		}
 	};
 
@@ -383,6 +399,9 @@ function FacilitatorCard( { saved, save } ) {
 					onChange={ ( edits ) => {
 						setFacilitator( edits.facilitator );
 						setProbe( null );
+						// Invalidate any in-flight probe so its response
+						// doesn't paint onto the newly-picked facilitator.
+						probeRequestId.current++;
 					} }
 				/>
 				{ '' !== facilitator && (

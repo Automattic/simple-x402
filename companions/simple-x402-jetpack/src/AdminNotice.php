@@ -57,7 +57,13 @@ final class AdminNotice {
 			return self::ISSUE_MISSING;
 		}
 		if ( class_exists( self::JETPACK_MANAGER ) ) {
-			$manager = new \Automattic\Jetpack\Connection\Manager( 'simple-x402-jetpack' );
+			// Deliberately omit the plugin_slug arg: it's used for namespacing
+			// consumer-specific options/locks and only makes sense for plugins
+			// that have registered with Automattic\Jetpack\Config::ensure().
+			// Passing an unregistered slug makes is_connected() return false
+			// even on connected sites, which would show a bogus "not
+			// connected" notice on every WP.com-hosted install.
+			$manager = new \Automattic\Jetpack\Connection\Manager();
 			if ( method_exists( $manager, 'is_connected' ) && ! $manager->is_connected() ) {
 				return self::ISSUE_NOT_CONNECTED;
 			}

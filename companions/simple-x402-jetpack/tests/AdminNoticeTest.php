@@ -36,11 +36,12 @@ final class AdminNoticeTest extends TestCase {
 		$this->assertSame( '', (string) ob_get_clean() );
 	}
 
-	public function test_renders_notice_when_wpcom_selected_and_jetpack_present(): void {
-		// The test bootstrap class_aliases a stub to Automattic\\Jetpack\\Connection\\Client
-		// but no Manager, so detect_issue() only sees "client present, assumed connected"
-		// and returns null. To exercise the notice-visible branch we'd need a Manager
-		// stub — tested separately below via detect_issue's pure-function API.
+	public function test_no_notice_rendered_when_client_present_and_no_manager_to_contradict(): void {
+		// Bootstrap class_aliases a Client stub but no Manager. detect_issue()
+		// therefore sees "client available, no contrary signal" → null → no
+		// notice. The branches that DO emit a notice (Client missing, or
+		// Manager present and is_connected()=false) can't be exercised here
+		// because the Client alias is installed permanently by bootstrap.
 		$this->assertTrue( class_exists( '\\Automattic\\Jetpack\\Connection\\Client' ) );
 		$this->assertFalse( class_exists( '\\Automattic\\Jetpack\\Connection\\Manager' ) );
 
@@ -50,8 +51,6 @@ final class AdminNoticeTest extends TestCase {
 
 		ob_start();
 		( new AdminNotice() )->maybe_render();
-		// With Client stub present and no Manager to contradict, detect_issue
-		// returns null — no notice.
 		$this->assertSame( '', (string) ob_get_clean() );
 	}
 
@@ -59,9 +58,10 @@ final class AdminNoticeTest extends TestCase {
 		$this->assertNull( AdminNotice::detect_issue() );
 	}
 
-	// The 'jetpack_missing' branch (Client class not present) can't be
-	// exercised without process isolation — the stub is permanently aliased
-	// once the bootstrap runs. Same constraint as our earlier
-	// SIMPLE_X402_TEST_CONNECTOR-gating tests: easy to reason about, hard to
-	// toggle at runtime, covered by reading the code.
+	// The 'jetpack_missing' branch (Client class not present) and the
+	// 'jetpack_not_connected' branch (Manager present + is_connected()=false)
+	// can't be exercised without process isolation — the Client stub is
+	// permanently aliased once the bootstrap runs, and we'd need to swap in
+	// a Manager stub dynamically. Both branches are short enough to audit
+	// by reading the code.
 }

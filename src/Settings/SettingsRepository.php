@@ -217,7 +217,10 @@ final class SettingsRepository {
 			// Invalid term: leave the stored value as-is.
 		}
 		if ( array_key_exists( 'facilitators', $partial ) && is_array( $partial['facilitators'] ) ) {
-			$existing_slots = is_array( $merged['facilitators'] ?? null ) ? $merged['facilitators'] : array();
+			// Re-normalise already-stored slots through the same sanitizer so
+			// historical writes with extra keys (schema drift from older
+			// builds, bad external writes) don't leak into the merged result.
+			$existing_slots = $this->sanitize_facilitators( $merged['facilitators'] ?? array() );
 			foreach ( $this->sanitize_facilitators( $partial['facilitators'] ) as $id => $slot ) {
 				$existing_slots[ $id ] = $slot;
 			}

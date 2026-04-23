@@ -32,6 +32,7 @@ final class TestConnectionAjax {
 	public function handle(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'error' => 'forbidden' ), 403 );
+			return;
 		}
 		check_ajax_referer( self::NONCE, 'nonce' );
 
@@ -40,11 +41,13 @@ final class TestConnectionAjax {
 			: '';
 		if ( '' === $id ) {
 			wp_send_json_error( array( 'error' => 'missing_connector_id' ), 400 );
+			return;
 		}
 
 		$client = $this->resolver->resolve( $id );
 		if ( null === $client ) {
 			wp_send_json_error( array( 'error' => 'unknown_connector', 'connector_id' => $id ), 404 );
+			return;
 		}
 
 		$probe = $client->test_connection();

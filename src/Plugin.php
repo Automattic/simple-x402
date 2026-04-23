@@ -155,7 +155,12 @@ final class Plugin {
 		$out = array();
 		foreach ( $_SERVER as $key => $value ) {
 			if ( str_starts_with( (string) $key, 'HTTP_' ) ) {
-				$name         = str_replace( '_', '-', substr( (string) $key, 5 ) );
+				// $_SERVER delivers HTTP_X_WALLET_ADDRESS — upper, underscored.
+				// Convert to canonical HTTP title-case (X-Wallet-Address) so
+				// the controller's mixed-case lookups match real traffic, not
+				// just what tests construct by hand.
+				$raw_name     = str_replace( '_', '-', substr( (string) $key, 5 ) );
+				$name         = ucwords( strtolower( $raw_name ), '-' );
 				$out[ $name ] = sanitize_text_field( (string) wp_unslash( $value ) );
 			}
 		}
