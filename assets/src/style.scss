@@ -95,3 +95,10 @@ body.simple-x402-screen .simple-x402-page__card-footer {
 		font-size: 12px;
 	}
 }
+
+// Thin separator between the facilitator picker + Test-connection line and
+// the wallet/price inputs inside the same card.
+.simple-x402-page__divider {
+	border-top: 1px solid #e4e4e4;
+	margin: 16px 0;
+}

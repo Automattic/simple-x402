@@ -195,10 +195,35 @@ const FACILITATOR_FIELDS = [
 	},
 ];
 
-function FacilitatorCard( { facilitator, setFacilitator } ) {
+const PAYMENT_FIELDS = [
+	{
+		id: 'wallet_address',
+		label: __( 'Receiving wallet', 'simple-x402' ),
+		type: 'text',
+	},
+	{
+		id: 'default_price',
+		label: __( 'Price per request (USDC)', 'simple-x402' ),
+		type: 'number',
+	},
+];
+
+const emptySlot = () => ( { wallet_address: '', default_price: '' } );
+
+function FacilitatorCard( { facilitator, setFacilitator, slots, setSlots } ) {
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
-	const isDirty = facilitator !== ( config.values.selected_facilitator_id || '' );
+
+	const slot   = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
+	const saved  = '' === facilitator
+		? emptySlot()
+		: ( ( config.values.facilitators || {} )[ facilitator ] ?? emptySlot() );
+	const savedId = config.values.selected_facilitator_id || '';
+
+	const isDirty =
+		facilitator !== savedId ||
+		( '' !== facilitator && ! isShallowEqual( slot, saved ) );
+
 	const runTest = async () => {
 		setTesting( true );
 		setProbe( null );
@@ -221,13 +246,20 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 		}
 	};
 
+	const onPaymentChange = ( edits ) => {
+		setSlots( {
+			...slots,
+			[ facilitator ]: { ...slot, ...edits },
+		} );
+	};
+
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle
 					title={ __( 'Facilitator', 'simple-x402' ) }
 					subtitle={ __(
-						'Where verify and settle requests are sent. The paywall is inert until one is selected.',
+						'Where verify and settle requests are sent, and where payments land. The paywall is inert until one is selected.',
 						'simple-x402'
 					) }
 				/>
@@ -247,87 +279,42 @@ function FacilitatorCard( { facilitator, setFacilitator } ) {
 				/>
 				<input type="hidden" name={ name( 'selected_facilitator_id' ) } value={ facilitator || '' } />
 				{ '' !== facilitator && (
-					<div className="simple-x402-page__field-help">
-						<Button
-							variant="link"
-							type="button"
-							onClick={ runTest }
-							disabled={ testing }
-							accessibleWhenDisabled
-						>
-							{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
-						</Button>
-						{ probe && (
-							<Text size={ 12 } variant="muted">
-								{ probe.ok
-									? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
-									: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
-							</Text>
-						) }
-					</div>
+					<>
+						<div className="simple-x402-page__field-help">
+							<Button
+								variant="link"
+								type="button"
+								onClick={ runTest }
+								disabled={ testing }
+								accessibleWhenDisabled
+							>
+								{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
+							</Button>
+							{ probe && (
+								<Text size={ 12 } variant="muted">
+									{ probe.ok
+										? `✓ ${ probe.http_code ?? '' } in ${ probe.duration_ms ?? '?' }ms`
+										: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
+								</Text>
+							) }
+						</div>
+						<div className="simple-x402-page__divider" />
+						<DataForm
+							data={ slot }
+							fields={ PAYMENT_FIELDS }
+							form={ {
+								layout: { type: 'regular', labelPosition: 'top' },
+								fields: PAYMENT_FIELDS.map( ( f ) => f.id ),
+							} }
+							onChange={ onPaymentChange }
+						/>
+					</>
 				) }
-			</CardBody>
-			<SaveFooter disabled={ ! isDirty } />
-		</Card>
-	);
-}
-
-const PAYMENT_FIELDS = [
-	{
-		id: 'wallet_address',
-		label: __( 'Receiving wallet', 'simple-x402' ),
-		type: 'text',
-	},
-	{
-		id: 'default_price',
-		label: __( 'Price per request (USDC)', 'simple-x402' ),
-		type: 'number',
-	},
-];
-
-const emptySlot = () => ( { wallet_address: '', default_price: '' } );
-
-function PaymentCard( { facilitatorId, slots, setSlots } ) {
-	if ( '' === facilitatorId ) {
-		return null;
-	}
-	const values = slots[ facilitatorId ] ?? emptySlot();
-	const saved  = ( config.values.facilitators || {} )[ facilitatorId ] ?? emptySlot();
-	const isDirty = ! isShallowEqual( values, saved );
-
-	const onChange = ( edits ) => {
-		setSlots( {
-			...slots,
-			[ facilitatorId ]: { ...values, ...edits },
-		} );
-	};
-
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle
-					title={ __( 'Payment', 'simple-x402' ) }
-					subtitle={ __(
-						'Wallet to receive funds and price per paywalled request. Network is set by the selected facilitator.',
-						'simple-x402'
-					) }
-				/>
-			</CardHeader>
-			<CardBody>
-				<DataForm
-					data={ values }
-					fields={ PAYMENT_FIELDS }
-					form={ {
-						layout: { type: 'regular', labelPosition: 'top' },
-						fields: PAYMENT_FIELDS.map( ( f ) => f.id ),
-					} }
-					onChange={ onChange }
-				/>
 				{ /* Submit every known slot so unrelated facilitators' stored values aren't wiped on save. */ }
-				{ Object.entries( slots ).map( ( [ id, slot ] ) => (
+				{ Object.entries( slots ).map( ( [ id, entry ] ) => (
 					<span key={ id }>
-						<input type="hidden" name={ facilitatorField( id, 'wallet_address' ) } value={ slot.wallet_address || '' } />
-						<input type="hidden" name={ facilitatorField( id, 'default_price' ) } value={ slot.default_price || '' } />
+						<input type="hidden" name={ facilitatorField( id, 'wallet_address' ) } value={ entry.wallet_address || '' } />
+						<input type="hidden" name={ facilitatorField( id, 'default_price' ) } value={ entry.default_price || '' } />
 					</span>
 				) ) }
 			</CardBody>
@@ -383,10 +370,6 @@ function SettingsApp() {
 				<FacilitatorCard
 					facilitator={ facilitator }
 					setFacilitator={ setFacilitator }
-				/>
-
-				<PaymentCard
-					facilitatorId={ facilitator }
 					slots={ slots }
 					setSlots={ setSlots }
 				/>
