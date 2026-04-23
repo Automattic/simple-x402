@@ -206,8 +206,14 @@ const WALLET_FIELDS = [
 const PRICING_FIELDS = [
 	{
 		id: 'default_price',
+		// USDC has 6 on-chain decimals, so prices down to 0.000001 are valid.
+		// A type='number' input would need a matching step attribute and
+		// would still reject pasted values that don't land on the grid; a
+		// plain text input lets site owners type any decimal and leans on
+		// the server sanitizer to reject non-numeric or non-positive input.
 		label: __( 'Price per request (USDC)', 'simple-x402' ),
-		type: 'number',
+		type: 'text',
+		placeholder: '0.01',
 	},
 ];
 
