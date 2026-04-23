@@ -200,7 +200,6 @@ const WALLET_FIELDS = [
 		id: 'wallet_address',
 		label: __( 'Receiving wallet', 'simple-x402' ),
 		type: 'text',
-		placeholder: '0x0000000000000000000000000000000000000000',
 	},
 ];
 
