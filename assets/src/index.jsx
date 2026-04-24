@@ -542,13 +542,6 @@ function SettingsApp() {
 							'simple-x402'
 						)
 					);
-				} else if ( mergedValues.paywall_audience === config.modes.audience.bots ) {
-					setProbeMessage(
-						__(
-							'Paywall probe skipped: bots-only mode cannot be checked from this browser.',
-							'simple-x402'
-						)
-					);
 				} else {
 					void runPaywallProbe( data.probe ).then( ( err ) => {
 						setProbeMessage(

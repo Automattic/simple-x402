@@ -79,12 +79,14 @@ final class PaywallController {
 	 * @param array{path:string,method:string,post_id:int,singular?:bool,headers:array<string,string>} $request Request details.
 	 */
 	public function handle( array $request ): void {
-		$rule = $this->rules->resolve(
+		$paywall_probe = $this->valid_paywall_probe_header( $request );
+		$rule          = $this->rules->resolve(
 			array(
-				'path'     => $request['path'],
-				'method'   => $request['method'],
-				'post_id'  => $request['post_id'],
-				'singular' => ! empty( $request['singular'] ),
+				'path'          => $request['path'],
+				'method'        => $request['method'],
+				'post_id'       => $request['post_id'],
+				'singular'      => ! empty( $request['singular'] ),
+				'paywall_probe' => $paywall_probe,
 			)
 		);
 		if ( null === $rule ) {
@@ -97,7 +99,7 @@ final class PaywallController {
 		// or force admins to pay for audit reasons). A valid probe header
 		// forces the default to "do not bypass" so admins can self-test 402.
 		$default_bypass = current_user_can( 'manage_options' );
-		if ( $this->valid_paywall_probe_header( $request ) ) {
+		if ( $paywall_probe ) {
 			$default_bypass = false;
 		}
 		if ( (bool) apply_filters( self::BYPASS_HOOK, $default_bypass, $request, $rule ) ) {

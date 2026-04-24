@@ -107,6 +107,7 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertIsArray( $seen );
 		$this->assertTrue( $seen['singular'] );
 		$this->assertSame( 1, $seen['post_id'] );
+		$this->assertFalse( $seen['paywall_probe'] );
 	}
 
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {

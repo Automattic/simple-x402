@@ -21,7 +21,9 @@ use SimpleX402\Settings\SettingsRepository;
  *                         `none` disables gating entirely.
  *  - `paywall_audience` — who the paywall targets (`everyone`, `bots`).
  *                         `bots` requires the request's User-Agent to match a
- *                         known crawler.
+ *                         known crawler, unless `paywall_probe` is set in
+ *                         context (valid settings self-check — same trust as
+ *                         the probe nonce header on the controller).
  *
  * Mode is checked first so the disabled state short-circuits before any
  * audience or post lookup.
@@ -45,6 +47,7 @@ final class DefaultPaywallRule {
 			return null;
 		}
 		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience()
+			&& empty( $ctx['paywall_probe'] )
 			&& ! $this->bots->is_bot()
 		) {
 			return null;
