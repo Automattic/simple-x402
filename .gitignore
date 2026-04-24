@@ -56,3 +56,4 @@ wp-config.php
 /node_modules/
 /assets/build/
 /scripts/dev-artifacts/
+/dist/
