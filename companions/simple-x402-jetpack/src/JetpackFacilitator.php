@@ -108,13 +108,30 @@ final class JetpackFacilitator implements Facilitator {
 		);
 		$encoded   = null !== $body ? wp_json_encode( $body ) : null;
 
-		$raw = \Automattic\Jetpack\Connection\Client::wpcom_json_api_request_as_blog(
-			$full_path,
-			self::API_VERSION,
-			$args,
-			$encoded,
-			self::API_BASE
-		);
+		$dev_url = (string) getenv( 'SIMPLE_X402_JETPACK_DEV_URL' );
+
+		if ( '' !== $dev_url ) {
+			// Dev override: skip Jetpack signing; hit a local stub directly.
+			// Set via env var when booting the PHP server (e.g. wp-now). See
+			// LOCAL_DEV.md. Never set this in production — it bypasses WP.com
+			// auth for the entire facilitator surface.
+			$dev_args = $args;
+			if ( null !== $encoded ) {
+				$dev_args['body'] = $encoded;
+			}
+			$raw = wp_remote_request(
+				rtrim( $dev_url, '/' ) . '/' . self::API_BASE . '/v' . self::API_VERSION . $full_path,
+				$dev_args
+			);
+		} else {
+			$raw = \Automattic\Jetpack\Connection\Client::wpcom_json_api_request_as_blog(
+				$full_path,
+				self::API_VERSION,
+				$args,
+				$encoded,
+				self::API_BASE
+			);
+		}
 		if ( is_wp_error( $raw ) ) {
 			return array(
 				'body'      => array(),

@@ -108,6 +108,23 @@ if ( ! function_exists( 'wp_remote_head' ) ) {
 		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '' );
 	}
 }
+if ( ! function_exists( 'wp_remote_request' ) ) {
+	function wp_remote_request( string $url, array $args = array() ) {
+		$GLOBALS['__sx402_http'] = array(
+			'url'    => $url,
+			'args'   => $args,
+			'method' => $args['method'] ?? 'GET',
+		);
+		if ( ! empty( $GLOBALS['__sx402_http_queue'] ) ) {
+			return array_shift( $GLOBALS['__sx402_http_queue'] );
+		}
+		$next = $GLOBALS['__sx402_http_next'] ?? null;
+		if ( $next instanceof \WP_Error ) {
+			return $next;
+		}
+		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+	}
+}
 if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
 	function wp_remote_retrieve_response_code( $response ): int {
 		return (int) ( $response['response']['code'] ?? 0 );

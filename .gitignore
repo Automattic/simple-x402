@@ -55,3 +55,4 @@ wp-config.php
 /.worktrees/
 /node_modules/
 /assets/build/
+/scripts/dev-artifacts/

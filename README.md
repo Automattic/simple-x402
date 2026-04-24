@@ -26,6 +26,8 @@ npm start          # dev/watch
 
 The admin UI lives in `assets/src/index.jsx` and builds to `assets/build/`. The output is gitignored — run `npm run build` before packaging the plugin.
 
+For an end-to-end local sandbox (wp-now + Jetpack companion + facilitator stub), see [LOCAL_DEV.md](LOCAL_DEV.md).
+
 ## Test client
 
 A small Node script under `scripts/` walks the full `402` → sign → retry flow against a paywalled URL on Base Sepolia.
