@@ -16,6 +16,12 @@ import './style.scss';
 
 const config = window.simpleX402Settings;
 
+const boltIcon = (
+	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+		<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="currentColor" />
+	</svg>
+);
+
 async function saveFields( partial ) {
 	const body = new FormData();
 	body.append( 'action', config.saveSettings.action );
@@ -408,8 +414,11 @@ function FacilitatorCard( { saved, save } ) {
 					<>
 						<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
 							<Button
-								variant="link"
+								variant="secondary"
+								size="compact"
 								type="button"
+								icon={ boltIcon }
+								iconSize={ 16 }
 								onClick={ runTest }
 								disabled={ testing }
 								accessibleWhenDisabled
