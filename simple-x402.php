@@ -3,7 +3,7 @@
  * Plugin Name:       Simple x402
  * Description:       Minimal x402 paywall for bots and API clients. Uses x402.org on Base Sepolia.
  * Version:           0.1.0
- * Requires at least: 6.4
+ * Requires at least: 7.0
  * Requires PHP:      8.1
  * License:           GPL-2.0-or-later
  * Text Domain:       simple-x402

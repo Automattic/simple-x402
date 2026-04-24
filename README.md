@@ -9,7 +9,7 @@ MVP. Bots/API clients only — there is no human checkout UI.
 ## Requirements
 
 - PHP 8.1+
-- WordPress 6.4+
+- WordPress 7.0+
 - Composer (for development)
 
 ## Install (development)
