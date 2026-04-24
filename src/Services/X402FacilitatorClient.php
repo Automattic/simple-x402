@@ -9,6 +9,9 @@ declare(strict_types=1);
 
 namespace SimpleX402\Services;
 
+use SimpleX402\Facilitator\Facilitator;
+use SimpleX402\Facilitator\TestResult;
+
 /**
  * Posts PaymentRequirements + PaymentPayload bodies to a facilitator's
  * /verify and /settle endpoints using wp_remote_post.
@@ -18,11 +21,16 @@ namespace SimpleX402\Services;
  * (no auth); live mode typically targets a commercial facilitator (e.g.
  * Coinbase CDP) that requires an API key.
  */
-final class X402FacilitatorClient {
+final class X402FacilitatorClient implements Facilitator {
 
-	private const TIMEOUT = 25;
+	private const TIMEOUT       = 25;
+	private const PROBE_TIMEOUT = 10;
 
 	public function __construct( private readonly FacilitatorProfile $profile ) {}
+
+	public function describe(): FacilitatorProfile {
+		return $this->profile;
+	}
 
 	/**
 	 * Verify a payment payload against requirements.
@@ -69,6 +77,44 @@ final class X402FacilitatorClient {
 			'network'     => $response['body']['network'] ?? null,
 			'error'       => $response['error'] ?? ( $response['body']['errorReason'] ?? null ),
 			'raw'         => $response['body'],
+		);
+	}
+
+	/**
+	 * Probe the facilitator base URL to see if it's reachable. Does not
+	 * attempt a real verify — this is the admin UI's "is the connection alive"
+	 * button. Any HTTP response (including 4xx) counts as reachable; only
+	 * network errors and 5xx count as down.
+	 */
+	public function test_connection(): TestResult {
+		$base    = rtrim( $this->profile->facilitator_url, '/' ) . '/';
+		$started = microtime( true );
+		$raw     = wp_remote_head(
+			$base,
+			array( 'timeout' => self::PROBE_TIMEOUT )
+		);
+		$elapsed = (int) round( ( microtime( true ) - $started ) * 1000 );
+
+		if ( is_wp_error( $raw ) ) {
+			return new TestResult(
+				ok: false,
+				error: $raw->get_error_message(),
+				duration_ms: $elapsed,
+			);
+		}
+		$code = wp_remote_retrieve_response_code( $raw );
+		if ( 0 === $code || $code >= 500 ) {
+			return new TestResult(
+				ok: false,
+				error: 0 === $code ? 'No response' : "HTTP {$code}",
+				http_code: $code,
+				duration_ms: $elapsed,
+			);
+		}
+		return new TestResult(
+			ok: true,
+			http_code: $code,
+			duration_ms: $elapsed,
 		);
 	}
 

@@ -45,24 +45,6 @@ final class SettingsChangeNotifier {
 		);
 	}
 
-	/**
-	 * The admin tried to switch to live mode while the live block is missing
-	 * one or more required fields. The mode has been reverted to test.
-	 *
-	 * @param string[] $missing Human-readable phrases naming each missing requirement.
-	 */
-	public function notify_live_mode_incomplete( array $missing ): void {
-		$this->emit(
-			'simple_x402_live_mode_incomplete',
-			'error',
-			sprintf(
-				/* translators: %s: comma-separated list of missing requirements. */
-				__( 'Live mode needs %s before it can be enabled. The plugin will keep using test mode.', 'simple-x402' ),
-				implode( ', ', $missing )
-			)
-		);
-	}
-
 	private function emit( string $code, string $type, string $message ): void {
 		add_settings_error( SettingsRepository::OPTION_NAME, $code, $message, $type );
 	}

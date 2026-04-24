@@ -18,7 +18,13 @@ MVP. Bots/API clients only — there is no human checkout UI.
 composer install
 composer test
 composer lint
+
+npm install
+npm run build      # production bundle for the admin UI
+npm start          # dev/watch
 ```
+
+The admin UI lives in `assets/src/index.jsx` and builds to `assets/build/`. The output is gitignored — run `npm run build` before packaging the plugin.
 
 ## Test client
 
@@ -50,6 +56,32 @@ Renaming the category in settings does not relabel existing posts — reassign t
 ## Extending
 
 See the `simple_x402_rule_for_request` filter in `src/Services/RuleResolver.php`.
+
+## Facilitator connectors (WP 7.0+)
+
+Simple x402 discovers facilitator backends through the [WordPress 7.0 Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/). A facilitator is any external service that can `verify` and `settle` x402 payments — x402.org, a site's own Coinbase CDP account, WP.com via Jetpack, etc.
+
+Publishing a facilitator is a two-step contract:
+
+1. **Register the connector** on `wp_connectors_init`. The plugin claims the type string `x402_facilitator`. Core keeps a fixed whitelist of fields (`name`, `description`, `type`, `authentication`, `plugin`) and drops anything else, so the registration is credentials-and-metadata only.
+
+    ```php
+    add_action( 'wp_connectors_init', function ( WP_Connector_Registry $registry ) {
+        $registry->register( 'my_facilitator', array(
+            'name'           => 'My x402 facilitator',
+            'description'    => 'One-line marketing blurb.',
+            'type'           => 'x402_facilitator',
+            'authentication' => array( 'method' => 'api_key', 'setting_name' => 'my_key' ),
+            'plugin'         => array( 'file' => 'my-plugin/my-plugin.php' ),
+        ) );
+    } );
+    ```
+
+2. **Provide the client** through the `simple_x402_facilitator_for_connector` filter (planned — not yet wired). Since core strips unknown fields from the registration payload, x402-specific capabilities (endpoint URL, supported networks, fee-split support) are delivered here, not in the registration array. Returning a `Facilitator` instance for your connector ID is how the plugin learns how to call your backend.
+
+### Built-in x402.org connector
+
+Simple x402 ships with one connector out of the box: `simple_x402_test`, which routes through the public x402.org facilitator on Base Sepolia. It's the default "try the paywall on testnet" option and requires no credentials. Site owners pick it from the Facilitator dropdown in Settings → Simple x402 and enter a receiving wallet + price. Real facilitators (e.g. a Jetpack-backed one, a direct Coinbase CDP one) show up alongside it when those plugins are installed.
 
 ## Suggested improvements
 

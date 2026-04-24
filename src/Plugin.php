@@ -10,7 +10,12 @@ declare(strict_types=1);
 namespace SimpleX402;
 
 use SimpleX402\Admin\PaywallIndicator;
+use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Admin\TestConnectionAjax;
+use SimpleX402\Connectors\ConnectorRegistry;
+use SimpleX402\Connectors\TestConnectorRegistrar;
+use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
@@ -36,12 +41,15 @@ final class Plugin {
 	 */
 	public static function boot(): void {
 		$notifier     = new SettingsChangeNotifier();
-		$settings     = new SettingsRepository( $notifier );
+		$settings     = new SettingsRepository();
 		$rules        = new RuleResolver();
+		$connectors   = new ConnectorRegistry();
+		$resolver     = new FacilitatorResolver( $connectors );
 		$controller   = new PaywallController(
 			$rules,
 			new GrantStore(),
-			$settings
+			$settings,
+			$resolver,
 		);
 		$bots         = new BotDetector( self::current_user_agent() );
 		$default_rule = new DefaultPaywallRule( $settings, $bots );
@@ -66,8 +74,19 @@ final class Plugin {
 		// this, the paywall silently disables itself.
 		add_action( 'delete_term', $guard, 10, 4 );
 
+		$test_connector = new TestConnectorRegistrar();
+		add_action( 'wp_connectors_init', $test_connector );
+		add_filter(
+			'simple_x402_facilitator_for_connector',
+			array( $test_connector, 'provide_facilitator' ),
+			10,
+			2
+		);
+
 		if ( is_admin() ) {
-			( new SettingsPage( $settings ) )->register();
+			( new SettingsPage( $settings, $connectors ) )->register();
+			( new TestConnectionAjax( $resolver ) )->register();
+			( new SettingsAjax( $settings ) )->register();
 		}
 
 		add_action(
@@ -136,7 +155,12 @@ final class Plugin {
 		$out = array();
 		foreach ( $_SERVER as $key => $value ) {
 			if ( str_starts_with( (string) $key, 'HTTP_' ) ) {
-				$name         = str_replace( '_', '-', substr( (string) $key, 5 ) );
+				// $_SERVER delivers HTTP_X_WALLET_ADDRESS — upper, underscored.
+				// Convert to canonical HTTP title-case (X-Wallet-Address) so
+				// the controller's mixed-case lookups match real traffic, not
+				// just what tests construct by hand.
+				$raw_name     = str_replace( '_', '-', substr( (string) $key, 5 ) );
+				$name         = ucwords( strtolower( $raw_name ), '-' );
 				$out[ $name ] = sanitize_text_field( (string) wp_unslash( $value ) );
 			}
 		}

@@ -12,6 +12,9 @@
         <testsuite name="integration">
             <directory>tests/Integration</directory>
         </testsuite>
+        <testsuite name="companions">
+            <directory>companions/simple-x402-jetpack/tests</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

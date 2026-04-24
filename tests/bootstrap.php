@@ -9,6 +9,9 @@ if ( ! defined( 'SIMPLE_X402_FILE' ) ) {
 if ( ! defined( 'SIMPLE_X402_VERSION' ) ) {
 	define( 'SIMPLE_X402_VERSION', '0.0.0-test' );
 }
+if ( ! defined( 'SIMPLE_X402_DIR' ) ) {
+	define( 'SIMPLE_X402_DIR', dirname( __DIR__ ) . '/' );
+}
 
 if ( ! function_exists( '__' ) ) {
 	function __( string $text, string $domain = 'default' ): string {
@@ -69,6 +72,9 @@ if ( ! function_exists( 'update_option' ) ) {
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
 		public function __construct( public string $code = '', public string $message = '' ) {}
+		public function get_error_message(): string {
+			return $this->message;
+		}
 	}
 }
 if ( ! function_exists( 'is_wp_error' ) ) {
@@ -87,6 +93,19 @@ if ( ! function_exists( 'wp_remote_post' ) ) {
 			return $next;
 		}
 		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+	}
+}
+if ( ! function_exists( 'wp_remote_head' ) ) {
+	function wp_remote_head( string $url, array $args = array() ) {
+		$GLOBALS['__sx402_http'] = array( 'url' => $url, 'args' => $args, 'method' => 'HEAD' );
+		if ( ! empty( $GLOBALS['__sx402_http_queue'] ) ) {
+			return array_shift( $GLOBALS['__sx402_http_queue'] );
+		}
+		$next = $GLOBALS['__sx402_http_next'] ?? null;
+		if ( $next instanceof \WP_Error ) {
+			return $next;
+		}
+		return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '' );
 	}
 }
 if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
@@ -323,6 +342,33 @@ if ( ! function_exists( 'wp_localize_script' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'wp_enqueue_style' ) ) {
+	function wp_enqueue_style( string $handle, string $src = '', array $deps = array(), $ver = false, string $media = 'all' ): bool {
+		$GLOBALS['__sx402_enqueued_styles'][ $handle ] = array(
+			'src'  => $src,
+			'deps' => $deps,
+			'ver'  => $ver,
+		);
+		return true;
+	}
+}
+if ( ! function_exists( 'get_terms' ) ) {
+	function get_terms( array $args = array() ): array {
+		$taxonomy = (string) ( $args['taxonomy'] ?? 'category' );
+		$out      = array();
+		foreach ( $GLOBALS['__sx402_existing_terms'] ?? array() as $row ) {
+			if ( ( $row['taxonomy'] ?? '' ) !== $taxonomy ) {
+				continue;
+			}
+			$term           = new \stdClass();
+			$term->term_id  = (int) $row['term_id'];
+			$term->name     = (string) $row['name'];
+			$term->taxonomy = (string) $row['taxonomy'];
+			$out[]          = $term;
+		}
+		return $out;
+	}
+}
 if ( ! function_exists( 'wp_dropdown_categories' ) ) {
 	function wp_dropdown_categories( array $args = array() ) {
 		$name     = (string) ( $args['name'] ?? 'cat' );
@@ -410,6 +456,54 @@ if ( ! class_exists( 'WP_Admin_Bar' ) ) {
 		}
 	}
 }
+if ( ! class_exists( 'WP_Connector_Registry' ) ) {
+	/**
+	 * Stand-in for WordPress 7.0's WP_Connector_Registry.
+	 *
+	 * Mirrors the public surface at
+	 * https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/.
+	 */
+	class WP_Connector_Registry {
+		public function register( string $id, array $args ): bool {
+			$GLOBALS['__sx402_connectors'][ $id ] = $args;
+			return true;
+		}
+
+		public function unregister( string $id ): ?array {
+			$prev = $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+			unset( $GLOBALS['__sx402_connectors'][ $id ] );
+			return $prev;
+		}
+
+		public function is_registered( string $id ): bool {
+			return isset( $GLOBALS['__sx402_connectors'][ $id ] );
+		}
+
+		public function get_registered( string $id ): ?array {
+			return $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+		}
+
+		/** @return array<string,array> */
+		public function get_all_registered(): array {
+			return $GLOBALS['__sx402_connectors'] ?? array();
+		}
+	}
+}
+if ( ! function_exists( 'wp_get_connectors' ) ) {
+	function wp_get_connectors(): array {
+		return $GLOBALS['__sx402_connectors'] ?? array();
+	}
+}
+if ( ! function_exists( 'wp_get_connector' ) ) {
+	function wp_get_connector( string $id ): ?array {
+		return $GLOBALS['__sx402_connectors'][ $id ] ?? null;
+	}
+}
+if ( ! function_exists( 'wp_is_connector_registered' ) ) {
+	function wp_is_connector_registered( string $id ): bool {
+		return isset( $GLOBALS['__sx402_connectors'][ $id ] );
+	}
+}
 if ( ! class_exists( 'WP_Term' ) ) {
 	class WP_Term {
 		public int $term_id   = 0;
@@ -439,8 +533,43 @@ $GLOBALS['__sx402_response'] = array(
 	'exited'  => false,
 );
 
+if ( ! class_exists( 'Automattic\\Jetpack\\Connection\\Client' ) ) {
+	/**
+	 * Stand-in for the jetpack-connection package's HTTP signer. Mirrors the
+	 * signature of `wpcom_json_api_request_as_blog` and records the call into
+	 * $GLOBALS['__sx402_jp'] so tests can assert what was sent + control the
+	 * canned response via $GLOBALS['__sx402_jp_next'].
+	 */
+	class Automattic_Jetpack_Connection_Client_Stub {
+		public static function wpcom_json_api_request_as_blog(
+			string $path,
+			string $version,
+			array $args = array(),
+			?string $body = null,
+			string $base_api_path = 'rest'
+		) {
+			$GLOBALS['__sx402_jp'] = array(
+				'path'          => $path,
+				'version'       => $version,
+				'args'          => $args,
+				'body'          => $body,
+				'base_api_path' => $base_api_path,
+			);
+			$next = $GLOBALS['__sx402_jp_next'] ?? null;
+			if ( $next instanceof \WP_Error ) {
+				return $next;
+			}
+			return $next ?? array( 'response' => array( 'code' => 200 ), 'body' => '{}' );
+		}
+	}
+	class_alias( 'Automattic_Jetpack_Connection_Client_Stub', 'Automattic\\Jetpack\\Connection\\Client' );
+}
+
 // Reset global state between tests.
 $GLOBALS['__sx402_options']    = array();
 $GLOBALS['__sx402_transients'] = array();
 $GLOBALS['__sx402_filters']    = array();
 $GLOBALS['__sx402_http']       = null;
+$GLOBALS['__sx402_connectors'] = array();
+$GLOBALS['__sx402_jp']         = null;
+$GLOBALS['__sx402_jp_next']    = null;

@@ -1,0 +1,96 @@
+@import '../../node_modules/@wordpress/dataviews/build-style/style.css';
+
+body.simple-x402-screen #wpcontent,
+body.simple-x402-screen #wpbody-content {
+	background: #fff;
+}
+
+body.simple-x402-screen #wpcontent {
+	padding-left: 0;
+}
+
+body.simple-x402-screen .wrap {
+	margin: 0;
+}
+
+.simple-x402-page__header {
+	padding: 16px 24px;
+	border-bottom: 1px solid #e4e4e4;
+	background: #fff;
+}
+
+.simple-x402-page__header-title {
+	font-size: 20px;
+	font-weight: 500;
+	line-height: 28px;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.simple-x402-page__header-subtitle {
+	color: #707070;
+	font-size: 13px;
+	line-height: 24px;
+	margin: 0;
+	padding-block-end: 4px;
+}
+
+.simple-x402-page__content {
+	padding: 24px;
+	max-width: 680px;
+	margin: 0 auto;
+}
+
+.simple-x402-page__notices:not(:empty) {
+	margin-bottom: 16px;
+}
+
+.simple-x402-page__radio-follow-up {
+	margin-left: 24px;
+	max-width: 320px;
+}
+
+.simple-x402-badge--active {
+	display: inline-flex;
+	align-items: center;
+	background: #d7f3e0;
+	color: #15672a;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1;
+	padding: 3px 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.simple-x402-page__notices .notice,
+.simple-x402-page__notices .updated,
+.simple-x402-page__notices .error {
+	margin: 0 0 8px;
+}
+
+body.simple-x402-screen .components-card__header {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+body.simple-x402-screen .simple-x402-page__card-footer {
+	border-top: none;
+}
+
+// Test-connection link sits on its own row below the facilitator picker,
+// with enough breathing room that it reads as a deliberate action rather
+// than help text glued to the input.
+.simple-x402-page__probe-row {
+	margin-top: 16px;
+}
+
+// Thin separator between the facilitator picker + Test-connection line and
+// the wallet/price inputs inside the same card.
+.simple-x402-page__divider {
+	border-top: 1px solid #e4e4e4;
+	margin: 16px 0;
+}
