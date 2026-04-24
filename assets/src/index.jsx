@@ -1,4 +1,4 @@
-import { createRoot, useEffect, useRef, useState } from '@wordpress/element';
+import { createInterpolateElement, createRoot, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import {
 	Button,
@@ -316,6 +316,10 @@ const FACILITATOR_FIELDS = [
 // characters, which is what local validation is for.
 const WALLET_RE = /^0x[0-9a-fA-F]{40}$/;
 
+/** @see https://ethereum.org/guides/how-to-create-an-ethereum-account/ */
+const ETHEREUM_ACCOUNT_GUIDE_URL =
+	'https://ethereum.org/guides/how-to-create-an-ethereum-account/';
+
 const emptySlot = () => ( { wallet_address: '' } );
 
 function FacilitatorCard( { saved, save } ) {
@@ -323,11 +327,6 @@ function FacilitatorCard( { saved, save } ) {
 	const [ slots, setSlots ] = useState( saved.facilitators || {} );
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
-	// Wallet input shows its red error state only after the user leaves the
-	// field — typing a partial address shouldn't flash red on every keystroke.
-	// Reset when the picker flips, since that swaps in a different slot's
-	// value and the new one hasn't been touched yet.
-	const [ walletTouched, setWalletTouched ] = useState( false );
 	// Every new probe bumps this ref; late-arriving fetches check it and
 	// drop their result if the user changed the picker or started a new
 	// probe in the meantime. Without this, switching facilitators mid-probe
@@ -342,10 +341,30 @@ function FacilitatorCard( { saved, save } ) {
 	const savedId = saved.selected_facilitator_id || '';
 
 	const walletValue = slot.wallet_address || '';
-	const walletInvalid = '' !== facilitator && ! WALLET_RE.test( walletValue );
-	const walletError = walletTouched && walletInvalid
+	const trimmedWallet = walletValue.trim();
+	const walletHasInvalidFormat =
+		'' !== facilitator && '' !== trimmedWallet && ! WALLET_RE.test( trimmedWallet );
+	const walletError = walletHasInvalidFormat
 		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'simple-x402' )
 		: null;
+	const walletHelp =
+		'' !== facilitator
+			? createInterpolateElement(
+					__(
+						'Required to accept payments. <a>How to create an Ethereum account</a> — guide on ethereum.org.',
+						'simple-x402'
+					),
+					{
+						a: (
+							<a
+								href={ ETHEREUM_ACCOUNT_GUIDE_URL }
+								target="_blank"
+								rel="noopener noreferrer"
+							/>
+						),
+					}
+				)
+			: null;
 
 	const isDirty =
 		facilitator !== savedId ||
@@ -400,7 +419,7 @@ function FacilitatorCard( { saved, save } ) {
 				<CardTitle
 					title={ __( 'Facilitator', 'simple-x402' ) }
 					subtitle={ __(
-						'Where verify and settle requests are sent, and where payments land. The paywall is inert until one is selected.',
+						'Where verify and settle requests are sent, and where payments land. The paywall stays inert until a receiving wallet is set.',
 						'simple-x402'
 					) }
 				/>
@@ -416,7 +435,6 @@ function FacilitatorCard( { saved, save } ) {
 					onChange={ ( edits ) => {
 						setFacilitator( edits.facilitator );
 						setProbe( null );
-						setWalletTouched( false );
 						// Invalidate any in-flight probe so its response
 						// doesn't paint onto the newly-picked facilitator.
 						probeRequestId.current++;
@@ -461,9 +479,10 @@ function FacilitatorCard( { saved, save } ) {
 								__nextHasNoMarginBottom
 								__next40pxDefaultSize
 								label={ __( 'Receiving wallet', 'simple-x402' ) }
+								placeholder={ __( 'Add a valid EVM address 0x...', 'simple-x402' ) }
+								help={ walletHelp }
 								value={ walletValue }
 								onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
-								onBlur={ () => setWalletTouched( true ) }
 								aria-invalid={ walletError ? 'true' : 'false' }
 							/>
 							{ walletError && (
@@ -476,7 +495,7 @@ function FacilitatorCard( { saved, save } ) {
 				) }
 			</CardBody>
 			<SaveFooter
-				disabled={ ! isDirty || walletInvalid }
+				disabled={ ! isDirty || walletHasInvalidFormat }
 				saving={ saving }
 				error={ error }
 				onSave={ onSave }
