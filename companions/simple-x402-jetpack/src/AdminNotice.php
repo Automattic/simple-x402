@@ -12,16 +12,21 @@ namespace SimpleX402\Jetpack;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
- * Surfaces a yellow admin notice in the WP-admin header when the user has
- * selected the WordPress.com facilitator but Jetpack Connection isn't
+ * Surfaces a yellow notice on the Simple x402 settings page when the user
+ * has selected the WordPress.com facilitator but Jetpack Connection isn't
  * available (package not installed, or installed but the site isn't
- * connected). Silently no-op when the selection is a different facilitator
- * — other connectors get their own notices from their own code.
+ * connected). Scoped to that one screen so the notice doesn't follow the
+ * admin around every other page.
  */
 final class AdminNotice {
 
 	private const ISSUE_MISSING       = 'jetpack_missing';
 	private const ISSUE_NOT_CONNECTED = 'jetpack_not_connected';
+
+	// Hardcoded rather than importing SettingsPage::MENU_SLUG so the
+	// companion doesn't grow a build-time coupling to the main plugin's
+	// internal constants.
+	private const SETTINGS_SCREEN = 'settings_page_simple-x402';
 
 	private const JETPACK_CLIENT  = '\\Automattic\\Jetpack\\Connection\\Client';
 	private const JETPACK_MANAGER = '\\Automattic\\Jetpack\\Connection\\Manager';
@@ -32,6 +37,10 @@ final class AdminNotice {
 
 	public function maybe_render(): void {
 		if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || self::SETTINGS_SCREEN !== $screen->id ) {
 			return;
 		}
 		if ( ! class_exists( SettingsRepository::class ) ) {

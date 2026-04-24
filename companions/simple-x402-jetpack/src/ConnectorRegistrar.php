@@ -38,18 +38,21 @@ final class ConnectorRegistrar {
 	/**
 	 * `simple_x402_facilitator_for_connector` filter callback.
 	 *
-	 * Returns a JetpackFacilitator when asked about our connector ID AND
-	 * Jetpack Connection is available on the site. Otherwise forwards the
-	 * existing value so other plugins can take over.
+	 * Returns a JetpackFacilitator when asked about our connector ID AND the
+	 * facilitator has a working transport — either Jetpack Connection is
+	 * installed, or a dev override URL is set (see SIMPLE_X402_JETPACK_DEV_URL
+	 * in JetpackFacilitator::call). Otherwise forwards the existing value so
+	 * other plugins can take over.
 	 */
 	public function provide_facilitator( ?Facilitator $existing, string $id ): ?Facilitator {
 		if ( self::ID !== $id || null !== $existing ) {
 			return $existing;
 		}
-		if ( ! class_exists( self::JETPACK_CLIENT ) ) {
-			// Jetpack isn't installed or the connection package isn't loaded.
-			// The connector will still appear in the picker but can't actually
-			// service requests until Jetpack is on the site.
+		$has_jetpack = class_exists( self::JETPACK_CLIENT );
+		$has_dev_url = '' !== (string) getenv( 'SIMPLE_X402_JETPACK_DEV_URL' );
+		if ( ! $has_jetpack && ! $has_dev_url ) {
+			// No working transport — the connector stays in the picker but
+			// service requests will fail until Jetpack lands on the site.
 			return $existing;
 		}
 		return new JetpackFacilitator();

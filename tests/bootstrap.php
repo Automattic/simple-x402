@@ -431,6 +431,12 @@ if ( ! function_exists( 'is_admin' ) ) {
 		return (bool) ( $GLOBALS['__sx402_is_admin'] ?? false );
 	}
 }
+if ( ! function_exists( 'get_current_screen' ) ) {
+	function get_current_screen(): ?object {
+		$id = $GLOBALS['__sx402_current_screen_id'] ?? null;
+		return null === $id ? null : (object) array( 'id' => (string) $id );
+	}
+}
 if ( ! function_exists( 'is_singular' ) ) {
 	function is_singular( $post_types = '' ): bool {
 		return (bool) ( $GLOBALS['__sx402_is_singular'] ?? false );

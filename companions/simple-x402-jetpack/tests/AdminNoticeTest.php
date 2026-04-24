@@ -11,9 +11,24 @@ use SimpleX402\Settings\SettingsRepository;
 final class AdminNoticeTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_options']           = array();
-		$GLOBALS['__sx402_existing_terms']    = array();
-		$GLOBALS['__sx402_current_user_caps'] = null; // admin by default via stub
+		$GLOBALS['__sx402_options']             = array();
+		$GLOBALS['__sx402_existing_terms']      = array();
+		$GLOBALS['__sx402_current_user_caps']   = null; // admin by default via stub
+		// Pretend we're on the Simple x402 settings screen so the notice
+		// reaches its facilitator/jetpack checks; tests that want the
+		// screen-gate early-return can unset this.
+		$GLOBALS['__sx402_current_screen_id']   = 'settings_page_simple-x402';
+	}
+
+	public function test_skips_rendering_off_the_simple_x402_settings_screen(): void {
+		$GLOBALS['__sx402_current_screen_id']                           = 'dashboard';
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'selected_facilitator_id' => ConnectorRegistrar::ID,
+		);
+
+		ob_start();
+		( new AdminNotice() )->maybe_render();
+		$this->assertSame( '', (string) ob_get_clean() );
 	}
 
 	public function test_skips_rendering_when_different_facilitator_selected(): void {
