@@ -46,9 +46,8 @@ final class Plugin {
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
 	 */
 	public static function boot(): void {
-		$notifier = new SettingsChangeNotifier();
-		$settings = new SettingsRepository();
-		self::maybe_autopick_test_facilitator( $settings );
+		$notifier     = new SettingsChangeNotifier();
+		$settings     = new SettingsRepository();
 		$rules        = new RuleResolver();
 		$connectors   = new ConnectorRegistry();
 		$resolver     = new FacilitatorResolver( $connectors );
@@ -88,6 +87,15 @@ final class Plugin {
 			array( $test_connector, 'provide_facilitator' ),
 			10,
 			2
+		);
+		// After all `wp_connectors_init` callbacks (ours registers at default 10),
+		// so ConnectorRegistry sees the built-in test connector before we read it.
+		add_action(
+			'wp_connectors_init',
+			static function (): void {
+				self::maybe_autopick_test_facilitator( new SettingsRepository() );
+			},
+			999
 		);
 
 		if ( is_admin() ) {
@@ -142,13 +150,15 @@ final class Plugin {
 		if ( $settings->paywall_category_term_id() <= 0 ) {
 			$settings->set_paywall_category_term_id( $default_id );
 		}
-		self::maybe_autopick_test_facilitator( $settings );
 	}
 
 	/**
 	 * Persist the built-in test facilitator once when the row is still empty.
 	 */
 	private static function maybe_autopick_test_facilitator( SettingsRepository $settings ): void {
+		if ( ! function_exists( 'wp_get_connectors' ) ) {
+			return;
+		}
 		if ( get_option( self::FACILITATOR_AUTOPICKED_OPTION, false ) ) {
 			return;
 		}
