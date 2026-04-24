@@ -198,13 +198,13 @@ final class SettingsRepository {
 			$merged['selected_facilitator_id'] = $this->sanitize_connector_id( $partial['selected_facilitator_id'] );
 		}
 		if ( array_key_exists( 'paywall_mode', $partial ) ) {
-			$mode = (string) $partial['paywall_mode'];
+			$mode                   = (string) $partial['paywall_mode'];
 			$merged['paywall_mode'] = in_array( $mode, self::VALID_PAYWALL_MODES, true )
 				? $mode
 				: self::DEFAULT_PAYWALL_MODE;
 		}
 		if ( array_key_exists( 'paywall_audience', $partial ) ) {
-			$audience = (string) $partial['paywall_audience'];
+			$audience                   = (string) $partial['paywall_audience'];
 			$merged['paywall_audience'] = in_array( $audience, self::VALID_AUDIENCES, true )
 				? $audience
 				: self::DEFAULT_AUDIENCE;
@@ -228,7 +228,28 @@ final class SettingsRepository {
 		}
 
 		update_option( self::OPTION_NAME, $merged );
-		return $merged;
+		return $this->with_settings_defaults( $merged );
+	}
+
+	/**
+	 * Ensure every canonical key is present in API / merge results (partial
+	 * updates must not drop keys the admin UI still relies on).
+	 *
+	 * @param array<string,mixed> $merged
+	 * @return array<string,mixed>
+	 */
+	private function with_settings_defaults( array $merged ): array {
+		return array_merge(
+			array(
+				'default_price'            => self::DEFAULT_PRICE,
+				'selected_facilitator_id'  => '',
+				'facilitators'             => array(),
+				'paywall_mode'             => self::DEFAULT_PAYWALL_MODE,
+				'paywall_audience'         => self::DEFAULT_AUDIENCE,
+				'paywall_category_term_id' => 0,
+			),
+			$merged
+		);
 	}
 
 	/**
@@ -238,6 +259,59 @@ final class SettingsRepository {
 		$stored                             = get_option( self::OPTION_NAME, array() );
 		$stored['paywall_category_term_id'] = $term_id;
 		update_option( self::OPTION_NAME, $stored );
+	}
+
+	/**
+	 * Permalink of one published post matching the paywall scope in $row, for admin diagnostics.
+	 *
+	 * @param array<string,mixed> $row Merged settings (paywall_mode, paywall_category_term_id).
+	 */
+	public function sample_paywalled_post_permalink( array $row ): ?string {
+		$mode = isset( $row['paywall_mode'] ) ? (string) $row['paywall_mode'] : self::DEFAULT_PAYWALL_MODE;
+		if ( self::PAYWALL_MODE_NONE === $mode ) {
+			return null;
+		}
+
+		$query = array(
+			'post_type'              => 'post',
+			'post_status'            => 'publish',
+			'posts_per_page'         => 1,
+			'orderby'                => 'date',
+			'order'                  => 'ASC',
+			'fields'                 => 'ids',
+			'suppress_filters'       => true,
+			'no_found_rows'          => true,
+			'ignore_sticky_posts'    => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		if ( self::PAYWALL_MODE_CATEGORY === $mode ) {
+			$term_id = (int) ( $row['paywall_category_term_id'] ?? 0 );
+			if ( $term_id <= 0 ) {
+				return null;
+			}
+			$query['tax_query'] = array(
+				array(
+					'taxonomy' => 'category',
+					'field'    => 'term_id',
+					'terms'    => array( $term_id ),
+				),
+			);
+		} elseif ( self::PAYWALL_MODE_ALL_POSTS !== $mode ) {
+			return null;
+		}
+
+		$ids = get_posts( $query );
+		if ( ! is_array( $ids ) || array() === $ids ) {
+			return null;
+		}
+		$post_id = (int) $ids[0];
+		if ( $post_id <= 0 ) {
+			return null;
+		}
+		$link = get_permalink( $post_id );
+		return is_string( $link ) && '' !== $link ? $link : null;
 	}
 
 	/**

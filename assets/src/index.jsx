@@ -45,7 +45,36 @@ async function saveFields( partial ) {
 	if ( ! resp.ok || ! json?.success ) {
 		throw new Error( json?.data?.error || `save_failed_http_${ resp.status }` );
 	}
-	return json.data.values;
+	return json.data;
+}
+
+const PROBE_HEADER = 'X-Simple-X402-Probe';
+
+/**
+ * @param {{ url: string, nonce: string }} probe
+ * @returns {Promise<string|null>} null if the response looks like a healthy paywall 402 JSON.
+ */
+async function runPaywallProbe( probe ) {
+	const resp = await fetch( probe.url, {
+		method: 'GET',
+		credentials: 'same-origin',
+		cache: 'no-store',
+		headers: { [ PROBE_HEADER ]: probe.nonce },
+	} );
+	const ct = resp.headers.get( 'content-type' ) || '';
+	if ( resp.status !== 402 || ! ct.includes( 'json' ) ) {
+		return sprintf(
+			/* translators: %s: HTTP status code or "unknown". */
+			__( 'Paywall probe: expected HTTP 402 with JSON, got status %s.', 'simple-x402' ),
+			String( resp.status )
+		);
+	}
+	try {
+		await resp.json();
+	} catch ( _ ) {
+		return __( 'Paywall probe: response was not valid JSON.', 'simple-x402' );
+	}
+	return null;
 }
 
 function SaveFooter( { disabled, saving, error, onSave } ) {
@@ -487,15 +516,58 @@ function FacilitatorCard( { saved, save } ) {
 
 function SettingsApp() {
 	const [ saved, setSaved ] = useState( config.values );
+	const [ probeMessage, setProbeMessage ] = useState( null );
 
 	// Shared save engine. Fires one AJAX call, merges the server-canonical
 	// response into `saved` so every card's isDirty check is evaluated against
 	// whatever the sanitizer actually stored (which may differ from what we
 	// sent, e.g. bad prices → 0.01).
 	const save = async ( partial ) => {
-		const merged = await saveFields( partial );
-		setSaved( ( prev ) => ( { ...prev, ...merged } ) );
-		return merged;
+		setProbeMessage( null );
+		const data = await saveFields( partial );
+		// Partial AJAX payloads can omit unchanged keys; merge with prior state
+		// so probe logic sees facilitator/audience from the last full snapshot.
+		const mergedValues = { ...saved, ...data.values };
+		setSaved( mergedValues );
+		if ( Object.prototype.hasOwnProperty.call( data, 'probe' ) ) {
+			if ( data.probe === null ) {
+				setProbeMessage(
+					__( 'Paywall mode is off — no live probe run.', 'simple-x402' )
+				);
+			} else if ( data.probe?.url && data.probe?.nonce ) {
+				if ( ! String( mergedValues.selected_facilitator_id ?? '' ).trim() ) {
+					setProbeMessage(
+						__(
+							'Paywall probe skipped: choose a facilitator so the paywall can respond.',
+							'simple-x402'
+						)
+					);
+				} else if ( mergedValues.paywall_audience === config.modes.audience.bots ) {
+					setProbeMessage(
+						__(
+							'Paywall probe skipped: bots-only mode cannot be checked from this browser.',
+							'simple-x402'
+						)
+					);
+				} else {
+					void runPaywallProbe( data.probe ).then( ( err ) => {
+						setProbeMessage(
+							err
+								? err
+								: __( 'Paywall probe: OK (HTTP 402 with JSON).', 'simple-x402' )
+						);
+					} );
+				}
+			} else if ( data.probe?.reason === 'no_matching_post' ) {
+				setProbeMessage(
+					__(
+						'Paywall probe skipped: no published post matches the current scope.',
+						'simple-x402'
+					)
+				);
+			}
+		}
+		return mergedValues;
 	};
 
 	const noticesRef = useRef( null );
@@ -523,6 +595,11 @@ function SettingsApp() {
 	return (
 		<div className="simple-x402-page__content">
 			<div className="simple-x402-page__notices" ref={ noticesRef } />
+			{ probeMessage && (
+				<Text size={ 13 } variant="muted" className="simple-x402-page__probe-hint">
+					{ probeMessage }
+				</Text>
+			) }
 			<VStack spacing={ 6 }>
 				<PaywallScopeCard saved={ saved } save={ save } />
 				<AudienceCard saved={ saved } save={ save } />

@@ -9,10 +9,11 @@ use SimpleX402\Settings\SettingsRepository;
 final class SettingsRepositoryTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_options']         = array();
-		$GLOBALS['__sx402_existing_terms']  = array();
-		$GLOBALS['__sx402_filters']         = array();
-		$GLOBALS['__sx402_settings_errors'] = array();
+		$GLOBALS['__sx402_options']            = array();
+		$GLOBALS['__sx402_existing_terms']     = array();
+		$GLOBALS['__sx402_filters']            = array();
+		$GLOBALS['__sx402_settings_errors']    = array();
+		$GLOBALS['__sx402_get_posts_return']   = null;
 	}
 
 	public function test_defaults_when_nothing_stored(): void {
@@ -257,5 +258,41 @@ final class SettingsRepositoryTest extends TestCase {
 		$this->assertSame( '0xabc', $repo->wallet_address() );
 		$this->assertSame( '0.50', $repo->default_price() );
 		$this->assertSame( 'simple_x402_test', $repo->selected_facilitator_id() );
+	}
+
+	public function test_sample_paywalled_post_permalink_returns_null_for_mode_none(): void {
+		$repo = new SettingsRepository();
+		$this->assertNull(
+			$repo->sample_paywalled_post_permalink(
+				array( 'paywall_mode' => SettingsRepository::PAYWALL_MODE_NONE )
+			)
+		);
+	}
+
+	public function test_sample_paywalled_post_permalink_returns_null_when_no_posts(): void {
+		$GLOBALS['__sx402_get_posts_return'] = array();
+		$repo                                = new SettingsRepository();
+		$this->assertNull(
+			$repo->sample_paywalled_post_permalink(
+				array(
+					'paywall_mode'             => SettingsRepository::PAYWALL_MODE_CATEGORY,
+					'paywall_category_term_id' => 5,
+				)
+			)
+		);
+	}
+
+	public function test_sample_paywalled_post_permalink_uses_first_matching_post_id(): void {
+		$GLOBALS['__sx402_get_posts_return'] = array( 42 );
+		$repo                                = new SettingsRepository();
+		$this->assertSame(
+			'https://example.test/p/42/',
+			$repo->sample_paywalled_post_permalink(
+				array(
+					'paywall_mode'             => SettingsRepository::PAYWALL_MODE_ALL_POSTS,
+					'paywall_category_term_id' => 1,
+				)
+			)
+		);
 	}
 }
