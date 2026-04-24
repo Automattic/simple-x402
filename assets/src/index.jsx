@@ -6,6 +6,7 @@ import {
 	CardBody,
 	CardFooter,
 	CardHeader,
+	TextControl,
 	__experimentalHStack as HStack,
 	__experimentalVStack as VStack,
 	__experimentalText as Text,
@@ -308,13 +309,12 @@ const FACILITATOR_FIELDS = [
 	},
 ];
 
-const WALLET_FIELDS = [
-	{
-		id: 'wallet_address',
-		label: __( 'Receiving wallet', 'simple-x402' ),
-		type: 'text',
-	},
-];
+// EVM address: 0x followed by exactly 40 hex characters. Checksum (EIP-55)
+// is intentionally not enforced — the facilitator's /verify call rejects
+// addresses the chain doesn't recognise, which is a stricter guarantee than
+// any client-side check. This regex catches typos, wrong length, and bad
+// characters, which is what local validation is for.
+const WALLET_RE = /^0x[0-9a-fA-F]{40}$/;
 
 const emptySlot = () => ( { wallet_address: '' } );
 
@@ -323,6 +323,11 @@ function FacilitatorCard( { saved, save } ) {
 	const [ slots, setSlots ] = useState( saved.facilitators || {} );
 	const [ probe, setProbe ] = useState( null );
 	const [ testing, setTesting ] = useState( false );
+	// Wallet input shows its red error state only after the user leaves the
+	// field — typing a partial address shouldn't flash red on every keystroke.
+	// Reset when the picker flips, since that swaps in a different slot's
+	// value and the new one hasn't been touched yet.
+	const [ walletTouched, setWalletTouched ] = useState( false );
 	// Every new probe bumps this ref; late-arriving fetches check it and
 	// drop their result if the user changed the picker or started a new
 	// probe in the meantime. Without this, switching facilitators mid-probe
@@ -335,6 +340,12 @@ function FacilitatorCard( { saved, save } ) {
 		? emptySlot()
 		: ( ( saved.facilitators || {} )[ facilitator ] ?? emptySlot() );
 	const savedId = saved.selected_facilitator_id || '';
+
+	const walletValue = slot.wallet_address || '';
+	const walletInvalid = '' !== facilitator && ! WALLET_RE.test( walletValue );
+	const walletError = walletTouched && walletInvalid
+		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'simple-x402' )
+		: null;
 
 	const isDirty =
 		facilitator !== savedId ||
@@ -405,6 +416,7 @@ function FacilitatorCard( { saved, save } ) {
 					onChange={ ( edits ) => {
 						setFacilitator( edits.facilitator );
 						setProbe( null );
+						setWalletTouched( false );
 						// Invalidate any in-flight probe so its response
 						// doesn't paint onto the newly-picked facilitator.
 						probeRequestId.current++;
@@ -438,19 +450,37 @@ function FacilitatorCard( { saved, save } ) {
 							) }
 						</HStack>
 						<div className="simple-x402-page__divider" />
-						<DataForm
-							data={ slot }
-							fields={ WALLET_FIELDS }
-							form={ {
-								layout: { type: 'regular', labelPosition: 'top' },
-								fields: WALLET_FIELDS.map( ( f ) => f.id ),
-							} }
-							onChange={ onWalletChange }
-						/>
+						<div
+							className={
+								walletError
+									? 'simple-x402-page__wallet simple-x402-page__wallet--error'
+									: 'simple-x402-page__wallet'
+							}
+						>
+							<TextControl
+								__nextHasNoMarginBottom
+								__next40pxDefaultSize
+								label={ __( 'Receiving wallet', 'simple-x402' ) }
+								value={ walletValue }
+								onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
+								onBlur={ () => setWalletTouched( true ) }
+								aria-invalid={ walletError ? 'true' : 'false' }
+							/>
+							{ walletError && (
+								<p className="simple-x402-page__wallet-error" role="alert">
+									{ walletError }
+								</p>
+							) }
+						</div>
 					</>
 				) }
 			</CardBody>
-			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
+			<SaveFooter
+				disabled={ ! isDirty || walletInvalid }
+				saving={ saving }
+				error={ error }
+				onSave={ onSave }
+			/>
 		</Card>
 	);
 }

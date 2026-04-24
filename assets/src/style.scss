@@ -94,3 +94,14 @@ body.simple-x402-screen .simple-x402-page__card-footer {
 	border-top: 1px solid #e4e4e4;
 	margin: 16px 0;
 }
+
+.simple-x402-page__wallet--error .components-text-control__input {
+	border-color: #cc1818;
+	box-shadow: 0 0 0 1px #cc1818;
+}
+
+.simple-x402-page__wallet-error {
+	color: #cc1818;
+	font-size: 12px;
+	margin: 4px 0 0;
+}
