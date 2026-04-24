@@ -37,11 +37,18 @@ use SimpleX402\Settings\SettingsRepository;
 final class Plugin {
 
 	/**
+	 * One-shot: if nothing is selected yet and the built-in test connector
+	 * exists, select it so new installs work without an extra settings save.
+	 */
+	private const FACILITATOR_AUTOPICKED_OPTION = 'simple_x402_facilitator_autopicked';
+
+	/**
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
 	 */
 	public static function boot(): void {
-		$notifier     = new SettingsChangeNotifier();
-		$settings     = new SettingsRepository();
+		$notifier = new SettingsChangeNotifier();
+		$settings = new SettingsRepository();
+		self::maybe_autopick_test_facilitator( $settings );
 		$rules        = new RuleResolver();
 		$connectors   = new ConnectorRegistry();
 		$resolver     = new FacilitatorResolver( $connectors );
@@ -135,6 +142,27 @@ final class Plugin {
 		if ( $settings->paywall_category_term_id() <= 0 ) {
 			$settings->set_paywall_category_term_id( $default_id );
 		}
+		self::maybe_autopick_test_facilitator( $settings );
+	}
+
+	/**
+	 * Persist the built-in test facilitator once when the row is still empty.
+	 */
+	private static function maybe_autopick_test_facilitator( SettingsRepository $settings ): void {
+		if ( get_option( self::FACILITATOR_AUTOPICKED_OPTION, false ) ) {
+			return;
+		}
+		if ( '' !== $settings->selected_facilitator_id() ) {
+			update_option( self::FACILITATOR_AUTOPICKED_OPTION, '1', false );
+			return;
+		}
+		$connectors = new ConnectorRegistry();
+		if ( ! array_key_exists( TestConnectorRegistrar::ID, $connectors->facilitators() ) ) {
+			// Connectors API missing or test not registered yet — try again on a later request.
+			return;
+		}
+		$settings->update( array( 'selected_facilitator_id' => TestConnectorRegistrar::ID ) );
+		update_option( self::FACILITATOR_AUTOPICKED_OPTION, '1', false );
 	}
 
 	/**
