@@ -89,13 +89,10 @@ final class PaywallIndicator {
 	}
 
 	/**
-	 * @param array{price?:string,ttl?:int,description?:string} $rule
+	 * @param array{price:string,ttl:int,description:string} $rule Rule normalised by {@see RuleResolver::resolve()}.
 	 */
 	private function node_title( array $rule ): string {
-		$price = isset( $rule['price'] ) ? (string) $rule['price'] : '';
-		if ( '' === $price ) {
-			$price = $this->settings->default_price();
-		}
+		$price = (string) $rule['price'];
 		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience() ) {
 			return esc_html(
 				sprintf(
