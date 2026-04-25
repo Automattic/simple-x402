@@ -16,8 +16,9 @@ use SimpleX402\Settings\SettingsRepository;
 final class PaywallControllerTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_filters']    = array();
-		$GLOBALS['__sx402_transients'] = array();
+		$GLOBALS['__sx402_current_user_id'] = 0;
+		$GLOBALS['__sx402_filters']          = array();
+		$GLOBALS['__sx402_transients']       = array();
 		$GLOBALS['__sx402_options']    = array(
 			'simple_x402_settings' => array(
 				'selected_facilitator_id' => 'simple_x402_test',
@@ -106,6 +107,7 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertIsArray( $seen );
 		$this->assertTrue( $seen['singular'] );
 		$this->assertSame( 1, $seen['post_id'] );
+		$this->assertFalse( $seen['paywall_probe'] );
 	}
 
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {
@@ -139,6 +141,42 @@ final class PaywallControllerTest extends TestCase {
 				'method'  => 'GET',
 				'post_id' => 0,
 				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_valid_paywall_probe_header_overrides_admin_bypass(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+		$GLOBALS['__sx402_current_user_id']   = 1;
+		$nonce                                  = wp_create_nonce( PaywallController::PROBE_NONCE_ACTION );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( PaywallController::PROBE_HEADER => $nonce ),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_invalid_probe_nonce_admin_still_bypasses(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( PaywallController::PROBE_HEADER => 'not-a-valid-nonce' ),
 			)
 		);
 

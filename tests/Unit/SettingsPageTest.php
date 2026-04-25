@@ -139,5 +139,9 @@ final class SettingsPageTest extends TestCase {
 
 		$this->assertSame( SettingsRepository::PAYWALL_MODE_NONE, $boot['modes']['paywall']['none'] );
 		$this->assertSame( SettingsRepository::AUDIENCE_BOTS, $boot['modes']['audience']['bots'] );
+
+		$this->assertArrayHasKey( 'paywallProbe', $boot );
+		$this->assertSame( 'simple_x402_paywall_probe', $boot['paywallProbe']['action'] );
+		$this->assertNotSame( '', $boot['paywallProbe']['nonce'] );
 	}
 }

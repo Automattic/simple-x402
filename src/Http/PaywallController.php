@@ -29,13 +29,19 @@ final class PaywallController {
 
 	public const BYPASS_HOOK = 'simple_x402_bypass_paywall';
 
+	/** Nonce action for {@see self::PROBE_HEADER} — settings probe drops admin bypass when valid. */
+	public const PROBE_NONCE_ACTION = 'simple_x402_paywall_probe';
+
+	/** Request header carrying {@see self::PROBE_NONCE_ACTION} from the settings screen self-check. */
+	public const PROBE_HEADER = 'X-Simple-X402-Probe';
+
 	/**
 	 * Lazily-resolved facilitator client + the builder that wraps its profile.
 	 * Deferred so requests that never reach the paywall path don't pay for
 	 * filter firing or option reads.
 	 */
-	private ?Facilitator $facilitator_svc         = null;
-	private ?PaymentRequirementsBuilder $builder  = null;
+	private ?Facilitator $facilitator_svc        = null;
+	private ?PaymentRequirementsBuilder $builder = null;
 
 	public function __construct(
 		private readonly RuleResolver $rules,
@@ -61,7 +67,8 @@ final class PaywallController {
 		if ( null === $resolved ) {
 			return null;
 		}
-		return $this->facilitator_svc = $resolved;
+		$this->facilitator_svc = $resolved;
+		return $this->facilitator_svc;
 	}
 
 	private function builder( Facilitator $facilitator ): PaymentRequirementsBuilder {
@@ -72,12 +79,14 @@ final class PaywallController {
 	 * @param array{path:string,method:string,post_id:int,singular?:bool,headers:array<string,string>} $request Request details.
 	 */
 	public function handle( array $request ): void {
-		$rule = $this->rules->resolve(
+		$paywall_probe = $this->valid_paywall_probe_header( $request );
+		$rule          = $this->rules->resolve(
 			array(
-				'path'     => $request['path'],
-				'method'   => $request['method'],
-				'post_id'  => $request['post_id'],
-				'singular' => ! empty( $request['singular'] ),
+				'path'          => $request['path'],
+				'method'        => $request['method'],
+				'post_id'       => $request['post_id'],
+				'singular'      => ! empty( $request['singular'] ),
+				'paywall_probe' => $paywall_probe,
 			)
 		);
 		if ( null === $rule ) {
@@ -87,8 +96,13 @@ final class PaywallController {
 		// Administrators bypass by default so they can preview and manage
 		// paywalled content. Extenders can widen or narrow this via the
 		// `simple_x402_bypass_paywall` filter (e.g. let post editors through,
-		// or force admins to pay for audit reasons).
-		if ( (bool) apply_filters( self::BYPASS_HOOK, current_user_can( 'manage_options' ), $request, $rule ) ) {
+		// or force admins to pay for audit reasons). A valid probe header
+		// forces the default to "do not bypass" so admins can self-test 402.
+		$default_bypass = current_user_can( 'manage_options' );
+		if ( $paywall_probe ) {
+			$default_bypass = false;
+		}
+		if ( (bool) apply_filters( self::BYPASS_HOOK, $default_bypass, $request, $rule ) ) {
 			return;
 		}
 
@@ -191,5 +205,16 @@ final class PaywallController {
 			?? $payload['payload']['from']
 			?? ''
 		);
+	}
+
+	/**
+	 * @param array{headers:array<string,string>} $request
+	 */
+	private function valid_paywall_probe_header( array $request ): bool {
+		$token = (string) ( $request['headers'][ self::PROBE_HEADER ] ?? '' );
+		if ( '' === $token ) {
+			return false;
+		}
+		return (bool) wp_verify_nonce( $token, self::PROBE_NONCE_ACTION );
 	}
 }

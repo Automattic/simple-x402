@@ -38,7 +38,7 @@ final class SettingsAjax {
 		}
 		check_ajax_referer( self::NONCE, 'nonce' );
 
-		$raw = isset( $_POST['fields'] )
+		$raw     = isset( $_POST['fields'] )
 			? wp_unslash( (string) $_POST['fields'] )
 			: '';
 		$decoded = json_decode( $raw, true );
@@ -48,6 +48,14 @@ final class SettingsAjax {
 		}
 
 		$merged = $this->settings->update( $decoded );
-		wp_send_json_success( array( 'values' => $merged ) );
+
+		$data          = array( 'values' => $merged );
+		$scope_changed = array_key_exists( 'paywall_mode', $decoded )
+			|| array_key_exists( 'paywall_category_term_id', $decoded );
+		if ( $scope_changed ) {
+			$data = array_merge( $data, $this->settings->build_paywall_probe_for_merged_row( $merged ) );
+		}
+
+		wp_send_json_success( $data );
 	}
 }

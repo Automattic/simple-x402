@@ -279,6 +279,54 @@ if ( ! function_exists( 'current_user_can' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'get_current_user_id' ) ) {
+	function get_current_user_id(): int {
+		return (int) ( $GLOBALS['__sx402_current_user_id'] ?? 0 );
+	}
+}
+if ( ! function_exists( 'wp_create_nonce' ) ) {
+	function wp_create_nonce( string $action = '-1' ): string {
+		$uid = get_current_user_id();
+		return hash_hmac( 'sha256', $action . '|' . $uid, 'sx402-test-nonce-secret' );
+	}
+}
+if ( ! function_exists( 'wp_verify_nonce' ) ) {
+	function wp_verify_nonce( string $nonce, string $action ): int|false {
+		$expected = wp_create_nonce( $action );
+		return hash_equals( $expected, $nonce ) ? 1 : false;
+	}
+}
+if ( ! function_exists( 'get_posts' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<int,\WP_Post|int>
+	 */
+	function get_posts( array $args = array() ): array {
+		return $GLOBALS['__sx402_get_posts_return'] ?? array();
+	}
+}
+if ( ! function_exists( 'get_permalink' ) ) {
+	/**
+	 * @param int|\WP_Post $post Post ID or object.
+	 */
+	function get_permalink( $post = 0, bool $leavename = false ): string|false {
+		if ( is_object( $post ) ) {
+			$post = (int) $post->ID;
+		}
+		$post = (int) $post;
+		return 'https://example.test/p/' . $post . '/';
+	}
+}
+if ( ! function_exists( 'check_ajax_referer' ) ) {
+	function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ): int|false {
+		return 1;
+	}
+}
+if ( ! function_exists( 'wp_send_json_success' ) ) {
+	function wp_send_json_success( $data = null ): void {
+		$GLOBALS['__sx402_json_success'] = $data;
+	}
+}
 if ( ! function_exists( 'esc_html_e' ) ) {
 	function esc_html_e( string $text, string $domain = 'default' ): void {
 		echo htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );

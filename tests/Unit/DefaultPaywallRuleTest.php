@@ -170,4 +170,14 @@ final class DefaultPaywallRuleTest extends TestCase {
 		$rule = $this->make_rule( self::HUMAN_UA );
 		$this->assertNotNull( $rule( null, array( 'post_id' => 7 ) ) );
 	}
+
+	public function test_bots_audience_treats_paywall_probe_as_bot_for_matching_post(): void {
+		$this->set_options( array( 'paywall_audience' => SettingsRepository::AUDIENCE_BOTS ) );
+		$GLOBALS['__sx402_terms'] = array( array( self::DEFAULT_TERM_ID, 'category', 7 ) );
+		$rule                     = $this->make_rule( self::HUMAN_UA );
+		$this->assertSame(
+			array( 'price' => '0.01', 'ttl' => 86400 ),
+			$rule( null, array( 'post_id' => 7, 'paywall_probe' => true ) )
+		);
+	}
 }

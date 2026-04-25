@@ -29,7 +29,8 @@ final class RuleResolver {
 	/**
 	 * Resolve the rule for a request.
 	 *
-	 * @param array $ctx Request context: path, method, post_id, singular (bool), plus any filter extensions.
+	 * @param array $ctx Request context: path, method, post_id, singular (bool),
+	 *                   paywall_probe (bool, optional), plus any filter extensions.
 	 */
 	public function resolve( array $ctx ): ?array {
 		$raw = apply_filters( self::HOOK, null, $ctx );
