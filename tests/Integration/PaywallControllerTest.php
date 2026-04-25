@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\RuleResolver;
@@ -18,6 +19,7 @@ final class PaywallControllerTest extends TestCase {
 	protected function setUp(): void {
 		$GLOBALS['__sx402_current_user_id'] = 0;
 		$GLOBALS['__sx402_filters']          = array();
+		$GLOBALS['__sx402_actions']          = array();
 		$GLOBALS['__sx402_transients']       = array();
 		$GLOBALS['__sx402_options']    = array(
 			'simple_x402_settings' => array(
@@ -264,6 +266,32 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 
+	public function test_requirements_use_managed_pool_pay_to_when_filter_returns_address(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter(
+			FacilitatorHooks::MANAGED_POOL_PAY_TO,
+			static fn ( string $p, string $id ): string => 'simple_x402_test' === $id
+				? '0x1111111111111111111111111111111111111111'
+				: $p,
+			10,
+			2
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$this->assertIsArray( $body );
+		$this->assertSame( '0x1111111111111111111111111111111111111111', $body['requirements']['payTo'] );
+	}
+
 	public function test_verifies_and_settles_then_issues_grant(): void {
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
@@ -296,6 +324,51 @@ final class PaywallControllerTest extends TestCase {
 
 		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
 		$this->assertTrue( ( new GrantStore() )->has_grant( '0xbuyer', '/foo' ) );
+	}
+
+	public function test_settle_success_fires_payment_settled_action(): void {
+		$captured = array();
+		add_action(
+			FacilitatorHooks::PAYMENT_SETTLED,
+			static function ( array $ctx ) use ( &$captured ): void {
+				$captured[] = $ctx;
+			}
+		);
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.02', 'ttl' => 60 ), 10, 2 );
+
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+
+		$GLOBALS['__sx402_http_queue'] = array(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":true,"transaction":"0xabc123","network":"base-sepolia"}',
+			),
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/paid-post',
+				'method'  => 'GET',
+				'post_id' => 42,
+				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+			)
+		);
+
+		$this->assertCount( 1, $captured );
+		$this->assertSame( '0xabc123', $captured[0]['transaction'] );
+		$this->assertSame( 42, $captured[0]['post_id'] );
+		$this->assertSame( '0.02', $captured[0]['amount'] );
+		$this->assertSame( 'simple_x402_test', $captured[0]['connector_id'] );
+		$this->assertSame( '0xreceiver', $captured[0]['pay_to'] );
 	}
 
 	public function test_verify_failure_responds_402(): void {

@@ -13,6 +13,7 @@ use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\PaywallProbeAjax;
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
+use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
@@ -186,9 +187,16 @@ final class SettingsPage {
 			array_values( $this->connectors->facilitators() )
 		);
 
+		$managed_wallet_facilitators = array();
+		foreach ( array_keys( $this->connectors->facilitators() ) as $fid ) {
+			if ( '' !== (string) apply_filters( FacilitatorHooks::MANAGED_POOL_PAY_TO, '', $fid ) ) {
+				$managed_wallet_facilitators[] = $fid;
+			}
+		}
+
 		return array(
-			'option'         => SettingsRepository::OPTION_NAME,
-			'modes'          => array(
+			'option'                    => SettingsRepository::OPTION_NAME,
+			'modes'                     => array(
 				'paywall'  => array(
 					'none'     => SettingsRepository::PAYWALL_MODE_NONE,
 					'allPosts' => SettingsRepository::PAYWALL_MODE_ALL_POSTS,
@@ -199,23 +207,24 @@ final class SettingsPage {
 					'bots'     => SettingsRepository::AUDIENCE_BOTS,
 				),
 			),
-			'categories'     => $categories,
-			'modeCategory'   => SettingsRepository::PAYWALL_MODE_CATEGORY,
-			'facilitators'   => $facilitators,
-			'ajaxUrl'        => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
-			'testConnection' => array(
+			'categories'                => $categories,
+			'modeCategory'              => SettingsRepository::PAYWALL_MODE_CATEGORY,
+			'facilitators'              => $facilitators,
+			'managedWalletFacilitators' => $managed_wallet_facilitators,
+			'ajaxUrl'                   => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
+			'testConnection'            => array(
 				'action' => TestConnectionAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( TestConnectionAjax::NONCE ) : '',
 			),
-			'saveSettings'   => array(
+			'saveSettings'              => array(
 				'action' => SettingsAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( SettingsAjax::NONCE ) : '',
 			),
-			'paywallProbe'   => array(
+			'paywallProbe'              => array(
 				'action' => PaywallProbeAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( PaywallProbeAjax::NONCE ) : '',
 			),
-			'values'         => array(
+			'values'                    => array(
 				'paywall_mode'             => $this->settings->paywall_mode(),
 				'paywall_audience'         => $this->settings->paywall_audience(),
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),

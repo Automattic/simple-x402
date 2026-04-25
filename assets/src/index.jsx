@@ -572,15 +572,18 @@ function FacilitatorCard( { saved, save } ) {
 		: ( ( saved.facilitators || {} )[ facilitator ] ?? emptySlot() );
 	const savedId = saved.selected_facilitator_id || '';
 
+	const managedWalletIds = config.managedWalletFacilitators || [];
+	const walletInputVisible = '' === facilitator || ! managedWalletIds.includes( facilitator );
+
 	const walletValue = slot.wallet_address || '';
 	const trimmedWallet = walletValue.trim();
 	const walletHasInvalidFormat =
-		'' !== facilitator && '' !== trimmedWallet && ! WALLET_RE.test( trimmedWallet );
+		walletInputVisible && '' !== facilitator && '' !== trimmedWallet && ! WALLET_RE.test( trimmedWallet );
 	const walletError = walletHasInvalidFormat
 		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'simple-x402' )
 		: null;
 	const walletHelp =
-		'' !== facilitator
+		'' !== facilitator && walletInputVisible
 			? createInterpolateElement(
 					__(
 						'Required to accept payments. <a>How to create an Ethereum account</a> — guide on ethereum.org.',
@@ -651,15 +654,23 @@ function FacilitatorCard( { saved, save } ) {
 			}
 		} );
 
+	const facilitatorSubtitle =
+		'' !== facilitator && ! walletInputVisible
+			? __(
+					'WordPress.com handles verify and settle. Payments are pooled for your account — no receiving wallet to configure here.',
+					'simple-x402'
+				)
+			: __(
+					'Where verify and settle requests are sent, and where payments land. The paywall stays inert until a receiving wallet is set.',
+					'simple-x402'
+				);
+
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle
 					title={ __( 'Facilitator', 'simple-x402' ) }
-					subtitle={ __(
-						'Where verify and settle requests are sent, and where payments land. The paywall stays inert until a receiving wallet is set.',
-						'simple-x402'
-					) }
+					subtitle={ facilitatorSubtitle }
 				/>
 			</CardHeader>
 			<CardBody>
@@ -707,29 +718,38 @@ function FacilitatorCard( { saved, save } ) {
 							) }
 						</HStack>
 						<div className="simple-x402-page__divider" />
-						<div
-							className={
-								walletError
-									? 'simple-x402-page__wallet simple-x402-page__wallet--error'
-									: 'simple-x402-page__wallet'
-							}
-						>
-							<TextControl
-								__nextHasNoMarginBottom
-								__next40pxDefaultSize
-								label={ __( 'Receiving wallet', 'simple-x402' ) }
-								placeholder={ __( 'Add a valid EVM address 0x...', 'simple-x402' ) }
-								help={ walletHelp }
-								value={ walletValue }
-								onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
-								aria-invalid={ walletError ? 'true' : 'false' }
-							/>
-							{ walletError && (
-								<p className="simple-x402-page__wallet-error" role="alert">
-									{ walletError }
-								</p>
-							) }
-						</div>
+						{ walletInputVisible ? (
+							<div
+								className={
+									walletError
+										? 'simple-x402-page__wallet simple-x402-page__wallet--error'
+										: 'simple-x402-page__wallet'
+								}
+							>
+								<TextControl
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+									label={ __( 'Receiving wallet', 'simple-x402' ) }
+									placeholder={ __( 'Add a valid EVM address 0x...', 'simple-x402' ) }
+									help={ walletHelp }
+									value={ walletValue }
+									onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
+									aria-invalid={ walletError ? 'true' : 'false' }
+								/>
+								{ walletError && (
+									<p className="simple-x402-page__wallet-error" role="alert">
+										{ walletError }
+									</p>
+								) }
+							</div>
+						) : (
+							<Text size={ 13 } variant="muted">
+								{ __(
+									'Receiving address is managed by WordPress.com for this facilitator.',
+									'simple-x402'
+								) }
+							</Text>
+						) }
 					</>
 				) }
 			</CardBody>

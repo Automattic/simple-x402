@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace SimpleX402\Settings;
 
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\FacilitatorHooks;
 
 /**
  * Thin wrapper around a single wp_options row.
@@ -63,6 +64,18 @@ final class SettingsRepository {
 	 */
 	public function wallet_address(): string {
 		return $this->wallet_address_for( $this->selected_facilitator_id() );
+	}
+
+	/**
+	 * Receiving address for PaymentRequirements: managed pool (filter) wins over the stored slot.
+	 */
+	public function resolved_pay_to_address(): string {
+		$id      = $this->selected_facilitator_id();
+		$managed = (string) apply_filters( FacilitatorHooks::MANAGED_POOL_PAY_TO, '', $id );
+		if ( '' !== $managed ) {
+			return $managed;
+		}
+		return $this->wallet_address();
 	}
 
 	/**

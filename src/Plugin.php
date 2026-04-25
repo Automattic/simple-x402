@@ -17,6 +17,7 @@ use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Connectors\TestConnectorRegistrar;
 use SimpleX402\Facilitator\FacilitatorResolver;
+use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
@@ -38,10 +39,13 @@ use SimpleX402\Settings\SettingsRepository;
 final class Plugin {
 
 	/**
-	 * One-shot: if nothing is selected yet and the built-in test connector
-	 * exists, select it so new installs work without an extra settings save.
+	 * One-shot: if nothing is selected yet, pick the best default connector so
+	 * new installs work without an extra settings save.
 	 */
 	private const FACILITATOR_AUTOPICKED_OPTION = 'simple_x402_facilitator_autopicked';
+
+	/** Must match {@see \SimpleX402\Jetpack\ConnectorRegistrar::ID}. */
+	private const WPCOM_X402_CONNECTOR_ID = 'wpcom_x402';
 
 	/**
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
@@ -94,7 +98,7 @@ final class Plugin {
 		add_action(
 			'wp_connectors_init',
 			static function (): void {
-				self::maybe_autopick_test_facilitator( new SettingsRepository() );
+				self::maybe_autopick_facilitator( new SettingsRepository() );
 			},
 			999
 		);
@@ -155,9 +159,9 @@ final class Plugin {
 	}
 
 	/**
-	 * Persist the built-in test facilitator once when the row is still empty.
+	 * Persist a default facilitator once when the row is still empty.
 	 */
-	private static function maybe_autopick_test_facilitator( SettingsRepository $settings ): void {
+	private static function maybe_autopick_facilitator( SettingsRepository $settings ): void {
 		if ( ! function_exists( 'wp_get_connectors' ) ) {
 			return;
 		}
@@ -169,12 +173,28 @@ final class Plugin {
 			return;
 		}
 		$connectors = new ConnectorRegistry();
-		if ( ! array_key_exists( TestConnectorRegistrar::ID, $connectors->facilitators() ) ) {
-			// Connectors API missing or test not registered yet — try again on a later request.
+		$preferred  = self::preferred_autopick_connector_id( $connectors );
+		if ( '' === $preferred ) {
 			return;
 		}
-		$settings->update( array( 'selected_facilitator_id' => TestConnectorRegistrar::ID ) );
+		$settings->update( array( 'selected_facilitator_id' => $preferred ) );
 		update_option( self::FACILITATOR_AUTOPICKED_OPTION, '1', false );
+	}
+
+	/**
+	 * Prefer WordPress.com when the connector exists and Jetpack reports connected;
+	 * otherwise fall back to the built-in test facilitator.
+	 */
+	private static function preferred_autopick_connector_id( ConnectorRegistry $connectors ): string {
+		$map = $connectors->facilitators();
+		if ( array_key_exists( self::WPCOM_X402_CONNECTOR_ID, $map )
+			&& (bool) apply_filters( FacilitatorHooks::IS_JETPACK_SITE_CONNECTED, false ) ) {
+			return self::WPCOM_X402_CONNECTOR_ID;
+		}
+		if ( array_key_exists( TestConnectorRegistrar::ID, $map ) ) {
+			return TestConnectorRegistrar::ID;
+		}
+		return '';
 	}
 
 	/**

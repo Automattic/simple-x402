@@ -85,6 +85,8 @@ Publishing a facilitator is a two-step contract:
 
 Simple x402 ships with one connector out of the box: `simple_x402_test`, which routes through the public x402.org facilitator on Base Sepolia. It's the default "try the paywall on testnet" option and requires no credentials. Site owners pick it from the Facilitator dropdown in Settings → Simple x402 and enter a receiving wallet + price. Real facilitators (e.g. a Jetpack-backed one, a direct Coinbase CDP one) show up alongside it when those plugins are installed.
 
+**Managed receiving address:** Extensions (including `simple-x402-jetpack`) may filter `simple_x402_managed_pool_pay_to` so `payTo` bypasses the per-site wallet field. **Settlement reporting:** after a successful settle, the plugin fires `simple_x402_payment_settled` and may POST to a URL from the `simple_x402_ledger_report_url` filter (see `SimpleX402\Services\FacilitatorHooks`). The ledger (or any hook subscriber that persists externally) should de-duplicate on `transaction`; the plugin may deliver the same settlement more than once under retries or concurrency.
+
 ## Suggested improvements
 
 - **Search-engine bots** — Today, detected crawlers get the same JSON 402 as other clients, which may hurt indexing. Consider treating verified search bots differently, e.g. returning `200` with a short excerpt, summary, or `meta description` in the body instead of a bare 402 (policy and implementation TBD).

@@ -5,6 +5,7 @@ namespace SimpleX402\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Settings\SettingsRepository;
 
 final class SettingsRepositoryTest extends TestCase {
@@ -337,5 +338,24 @@ final class SettingsRepositoryTest extends TestCase {
 				)
 			)
 		);
+	}
+
+	public function test_resolved_pay_to_prefers_managed_pool_from_filter(): void {
+		$repo = new SettingsRepository();
+		$repo->save(
+			array(
+				'selected_facilitator_id' => 'simple_x402_test',
+				'facilitators'            => array(
+					'simple_x402_test' => array( 'wallet_address' => '0xFromSlot' ),
+				),
+			)
+		);
+		add_filter(
+			FacilitatorHooks::MANAGED_POOL_PAY_TO,
+			static fn ( string $p, string $id ): string => 'simple_x402_test' === $id ? '0xManagedPool' : $p,
+			10,
+			2
+		);
+		$this->assertSame( '0xManagedPool', $repo->resolved_pay_to_address() );
 	}
 }
