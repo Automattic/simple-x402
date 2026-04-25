@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Services\RuleResolver;
+use SimpleX402\Settings\SettingsRepository;
 use WP_Admin_Bar;
 
 final class PaywallIndicatorTest extends TestCase {
@@ -18,6 +19,7 @@ final class PaywallIndicatorTest extends TestCase {
 		$GLOBALS['__sx402_request_uri']        = '/post-slug/';
 		$GLOBALS['__sx402_current_user_caps']  = array( 'manage_options' );
 		$GLOBALS['__sx402_filters']            = array();
+		$GLOBALS['__sx402_options']           = array();
 	}
 
 	private function register_rule( ?array $rule ): void {
@@ -26,24 +28,38 @@ final class PaywallIndicatorTest extends TestCase {
 		);
 	}
 
+	private function indicator(): PaywallIndicator {
+		return new PaywallIndicator( new RuleResolver(), new SettingsRepository() );
+	}
+
 	public function test_adds_node_when_rule_resolves(): void {
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertCount( 1, $bar->nodes );
 		$this->assertSame( PaywallIndicator::NODE_ID, $bar->nodes[0]['id'] );
-		$this->assertSame( 'Paywall active', $bar->nodes[0]['title'] );
+		$this->assertSame( 'Paywalled (bots only, $0.25)', $bar->nodes[0]['title'] );
+	}
+
+	public function test_adds_node_title_uses_everyone_label_when_set(): void {
+		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+			'paywall_audience' => SettingsRepository::AUDIENCE_EVERYONE,
+		);
+		$this->register_rule( array( 'price' => '0.01', 'ttl' => 86400 ) );
+		$bar = new WP_Admin_Bar();
+
+		$this->indicator()->add_node( $bar );
+
+		$this->assertSame( 'Paywalled (everyone, $0.01)', $bar->nodes[0]['title'] );
 	}
 
 	public function test_node_links_to_settings_page(): void {
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertStringContainsString(
 			'options-general.php?page=' . SettingsPage::MENU_SLUG,
@@ -53,10 +69,9 @@ final class PaywallIndicatorTest extends TestCase {
 
 	public function test_skips_when_rule_is_null(): void {
 		$this->register_rule( null );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertSame( array(), $bar->nodes );
 	}
@@ -64,10 +79,9 @@ final class PaywallIndicatorTest extends TestCase {
 	public function test_skips_on_wp_admin_screens(): void {
 		$GLOBALS['__sx402_is_admin'] = true;
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertSame( array(), $bar->nodes );
 	}
@@ -75,10 +89,9 @@ final class PaywallIndicatorTest extends TestCase {
 	public function test_skips_when_user_lacks_manage_options(): void {
 		$GLOBALS['__sx402_current_user_caps'] = array();
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertSame( array(), $bar->nodes );
 	}
@@ -86,10 +99,9 @@ final class PaywallIndicatorTest extends TestCase {
 	public function test_skips_when_not_singular(): void {
 		$GLOBALS['__sx402_is_singular'] = false;
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
-		$indicator = new PaywallIndicator( new RuleResolver() );
-		$bar       = new WP_Admin_Bar();
+		$bar = new WP_Admin_Bar();
 
-		$indicator->add_node( $bar );
+		$this->indicator()->add_node( $bar );
 
 		$this->assertSame( array(), $bar->nodes );
 	}
@@ -105,7 +117,7 @@ final class PaywallIndicatorTest extends TestCase {
 		$GLOBALS['__sx402_queried_object_id'] = 99;
 		$GLOBALS['__sx402_request_uri']       = '/deep/slug/';
 
-		( new PaywallIndicator( new RuleResolver() ) )->add_node( new WP_Admin_Bar() );
+		$this->indicator()->add_node( new WP_Admin_Bar() );
 
 		$this->assertSame( 99, $captured['post_id'] );
 		$this->assertSame( '/deep/slug/', $captured['path'] );

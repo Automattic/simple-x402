@@ -67,7 +67,7 @@ final class Plugin {
 		$categories   = new CategoryRepository();
 		$guard        = new PaywallCategoryGuard( $settings, $categories, $notifier );
 		$mode_note    = new AllPostsModeNoticeEmitter( $notifier );
-		$indicator    = new PaywallIndicator( $rules );
+		$indicator    = new PaywallIndicator( $rules, $settings );
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
