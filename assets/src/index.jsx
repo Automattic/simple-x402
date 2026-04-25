@@ -543,13 +543,24 @@ function SettingsApp() {
 						)
 					);
 				} else {
-					void runPaywallProbe( data.probe ).then( ( err ) => {
-						setProbeMessage(
-							err
-								? err
-								: __( 'Paywall probe: OK (HTTP 402 with JSON).', 'simple-x402' )
-						);
-					} );
+					void runPaywallProbe( data.probe )
+						.then( ( err ) => {
+							setProbeMessage(
+								err
+									? err
+									: __( 'Paywall probe: OK (HTTP 402 with JSON).', 'simple-x402' )
+							);
+						} )
+						.catch( ( e ) => {
+							const detail = e instanceof Error ? e.message : String( e );
+							setProbeMessage(
+								sprintf(
+									/* translators: %s: Error detail (e.g. network failure). */
+									__( 'Paywall probe failed: %s', 'simple-x402' ),
+									detail
+								)
+							);
+						} );
 				}
 			} else if ( data.probe?.reason === 'no_matching_post' ) {
 				setProbeMessage(
