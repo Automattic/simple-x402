@@ -98,13 +98,19 @@ final class PaywallIndicator {
 		}
 		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience() ) {
 			return esc_html(
-				// translators: %s: decimal USDC amount (e.g. 0.01).
-				sprintf( __( 'Paywalled (bots only, $%s)', 'simple-x402' ), $price )
+				sprintf(
+					/* translators: %s: decimal USDC amount (e.g. 0.01). */
+					__( 'Paywalled (bots only, $%s)', 'simple-x402' ),
+					$price
+				)
 			);
 		}
 		return esc_html(
-			// translators: %s: decimal USDC amount (e.g. 0.01).
-			sprintf( __( 'Paywalled (everyone, $%s)', 'simple-x402' ), $price )
+			sprintf(
+				/* translators: %s: decimal USDC amount (e.g. 0.01). */
+				__( 'Paywalled (everyone, $%s)', 'simple-x402' ),
+				$price
+			)
 		);
 	}
 }
