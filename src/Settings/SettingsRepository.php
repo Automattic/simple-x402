@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace SimpleX402\Settings;
 
+use SimpleX402\Http\PaywallController;
+
 /**
  * Thin wrapper around a single wp_options row.
  *
@@ -312,6 +314,30 @@ final class SettingsRepository {
 		}
 		$link = get_permalink( $post_id );
 		return is_string( $link ) && '' !== $link ? $link : null;
+	}
+
+	/**
+	 * Build the paywall self-check descriptor (nonce + URL, skip reasons, or off).
+	 * Same shape as the `probe` field appended after a scope save.
+	 *
+	 * @param array<string,mixed> $merged Merged settings row (must include paywall_mode).
+	 * @return array{probe: null|array<string,mixed>}
+	 */
+	public function build_paywall_probe_for_merged_row( array $merged ): array {
+		$mode = isset( $merged['paywall_mode'] ) ? (string) $merged['paywall_mode'] : self::DEFAULT_PAYWALL_MODE;
+		if ( self::PAYWALL_MODE_NONE === $mode ) {
+			return array( 'probe' => null );
+		}
+		$url = $this->sample_paywalled_post_permalink( $merged );
+		if ( null === $url || '' === $url ) {
+			return array( 'probe' => array( 'reason' => 'no_matching_post' ) );
+		}
+		return array(
+			'probe' => array(
+				'url'   => $url,
+				'nonce' => wp_create_nonce( PaywallController::PROBE_NONCE_ACTION ),
+			),
+		);
 	}
 
 	/**

@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
-use SimpleX402\Http\PaywallController;
 use SimpleX402\Settings\SettingsRepository;
 
 /**
@@ -54,20 +53,7 @@ final class SettingsAjax {
 		$scope_changed = array_key_exists( 'paywall_mode', $decoded )
 			|| array_key_exists( 'paywall_category_term_id', $decoded );
 		if ( $scope_changed ) {
-			$mode = $merged['paywall_mode'] ?? SettingsRepository::DEFAULT_PAYWALL_MODE;
-			if ( SettingsRepository::PAYWALL_MODE_NONE === $mode ) {
-				$data['probe'] = null;
-			} else {
-				$url = $this->settings->sample_paywalled_post_permalink( $merged );
-				if ( null !== $url && '' !== $url ) {
-					$data['probe'] = array(
-						'url'   => $url,
-						'nonce' => wp_create_nonce( PaywallController::PROBE_NONCE_ACTION ),
-					);
-				} else {
-					$data['probe'] = array( 'reason' => 'no_matching_post' );
-				}
-			}
+			$data = array_merge( $data, $this->settings->build_paywall_probe_for_merged_row( $merged ) );
 		}
 
 		wp_send_json_success( $data );

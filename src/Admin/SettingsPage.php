@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace SimpleX402\Admin;
 
 use SimpleX402\Admin\SettingsAjax;
+use SimpleX402\Admin\PaywallProbeAjax;
 use SimpleX402\Admin\TestConnectionAjax;
 use SimpleX402\Connectors\ConnectorRegistry;
 use SimpleX402\Settings\SettingsRepository;
@@ -139,10 +140,12 @@ final class SettingsPage {
 					<?php esc_html_e( 'Simple x402', 'simple-x402' ); ?>
 				</h1>
 				<p class="simple-x402-page__header-subtitle">
-					<?php esc_html_e(
+					<?php
+					esc_html_e(
 						'Configure how the x402 paywall protects your content and where payments go.',
 						'simple-x402'
-					); ?>
+					);
+					?>
 				</p>
 			</header>
 			<div id="simple-x402-app"></div>
@@ -156,17 +159,21 @@ final class SettingsPage {
 	 * @return array<string,mixed>
 	 */
 	public function bootstrap_data(): array {
+		$terms = get_terms(
+			array(
+				'taxonomy'   => 'category',
+				'hide_empty' => false,
+			)
+		);
+		if ( ! is_array( $terms ) ) {
+			$terms = array();
+		}
 		$categories = array_map(
 			static fn ( $term ): array => array(
 				'term_id' => (int) $term->term_id,
 				'name'    => (string) $term->name,
 			),
-			get_terms(
-				array(
-					'taxonomy'   => 'category',
-					'hide_empty' => false,
-				)
-			) ?: array()
+			$terms
 		);
 
 		$facilitators = array_map(
@@ -180,8 +187,8 @@ final class SettingsPage {
 		);
 
 		return array(
-			'option' => SettingsRepository::OPTION_NAME,
-			'modes'  => array(
+			'option'         => SettingsRepository::OPTION_NAME,
+			'modes'          => array(
 				'paywall'  => array(
 					'none'     => SettingsRepository::PAYWALL_MODE_NONE,
 					'allPosts' => SettingsRepository::PAYWALL_MODE_ALL_POSTS,
@@ -192,9 +199,9 @@ final class SettingsPage {
 					'bots'     => SettingsRepository::AUDIENCE_BOTS,
 				),
 			),
-			'categories'    => $categories,
-			'modeCategory'  => SettingsRepository::PAYWALL_MODE_CATEGORY,
-			'facilitators'  => $facilitators,
+			'categories'     => $categories,
+			'modeCategory'   => SettingsRepository::PAYWALL_MODE_CATEGORY,
+			'facilitators'   => $facilitators,
 			'ajaxUrl'        => function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '',
 			'testConnection' => array(
 				'action' => TestConnectionAjax::ACTION,
@@ -204,7 +211,11 @@ final class SettingsPage {
 				'action' => SettingsAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( SettingsAjax::NONCE ) : '',
 			),
-			'values' => array(
+			'paywallProbe'   => array(
+				'action' => PaywallProbeAjax::ACTION,
+				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( PaywallProbeAjax::NONCE ) : '',
+			),
+			'values'         => array(
 				'paywall_mode'             => $this->settings->paywall_mode(),
 				'paywall_audience'         => $this->settings->paywall_audience(),
 				'paywall_category_term_id' => $this->settings->paywall_category_term_id(),

@@ -77,6 +77,27 @@ async function runPaywallProbe( probe ) {
 	return null;
 }
 
+async function fetchPaywallProbeDescriptorFromServer() {
+	const body = new FormData();
+	body.append( 'action', config.paywallProbe.action );
+	body.append( 'nonce', config.paywallProbe.nonce );
+	const resp = await fetch( config.ajaxUrl, {
+		method: 'POST',
+		credentials: 'same-origin',
+		body,
+	} );
+	let json = null;
+	try {
+		json = await resp.json();
+	} catch ( _ ) {
+		throw new Error( `probe_descriptor_failed_http_${ resp.status }` );
+	}
+	if ( ! resp.ok || ! json?.success ) {
+		throw new Error( json?.data?.error || `probe_descriptor_failed_http_${ resp.status }` );
+	}
+	return json.data;
+}
+
 /**
  * Shared result line for facilitator "Test connection" and paywall self-check.
  *
@@ -231,6 +252,100 @@ function PaywallScopeCard( { saved, save } ) {
 		paywallMode !== saved.paywall_mode ||
 		Number( termId ) !== Number( saved.paywall_category_term_id );
 
+	const paywallTestDisabled =
+		isDirty || saved.paywall_mode === config.modes.paywall.none;
+
+	const runPaywallProbeFollowThrough = async ( probeBlock, rid, mergedSnapshot ) => {
+		if ( probeBlock == null ) {
+			if ( rid !== wallProbeRequestId.current ) {
+				return;
+			}
+			setWallProbe( {
+				infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
+			} );
+			return;
+		}
+		if ( probeBlock?.reason === 'no_matching_post' ) {
+			if ( rid !== wallProbeRequestId.current ) {
+				return;
+			}
+			setWallProbe( {
+				infoMessage: __(
+					'Paywall probe skipped: no published post matches the current scope.',
+					'simple-x402'
+				),
+			} );
+			return;
+		}
+		if ( ! probeBlock?.url || ! probeBlock?.nonce ) {
+			return;
+		}
+		if ( ! String( mergedSnapshot.selected_facilitator_id ?? '' ).trim() ) {
+			if ( rid !== wallProbeRequestId.current ) {
+				return;
+			}
+			setWallProbe( {
+				infoMessage: __(
+					'Paywall probe skipped: choose a facilitator so the paywall can respond.',
+					'simple-x402'
+				),
+			} );
+			return;
+		}
+
+		setWallProbePending( true );
+		const t0 = performance.now();
+		try {
+			const err = await runPaywallProbe( {
+				url: probeBlock.url,
+				nonce: probeBlock.nonce,
+			} );
+			if ( rid !== wallProbeRequestId.current ) {
+				return;
+			}
+			const durationMs = Math.round( performance.now() - t0 );
+			if ( err ) {
+				setWallProbe( { failureMessage: err } );
+			} else {
+				setWallProbe( { success: true, durationMs } );
+			}
+		} catch ( e ) {
+			if ( rid !== wallProbeRequestId.current ) {
+				return;
+			}
+			const detail = e instanceof Error ? e.message : String( e );
+			setWallProbe( {
+				failureMessage: sprintf(
+					/* translators: %s: Error detail (e.g. network failure). */
+					__( 'Paywall probe failed: %s', 'simple-x402' ),
+					detail
+				),
+			} );
+		} finally {
+			if ( rid === wallProbeRequestId.current ) {
+				setWallProbePending( false );
+			}
+		}
+	};
+
+	const onTestPaywall = () =>
+		run( async () => {
+			const rid = ++wallProbeRequestId.current;
+			setWallProbe( null );
+			setWallProbePending( false );
+			try {
+				const wrap = await fetchPaywallProbeDescriptorFromServer();
+				await runPaywallProbeFollowThrough( wrap.probe, rid, saved );
+			} catch ( e ) {
+				if ( rid !== wallProbeRequestId.current ) {
+					return;
+				}
+				setWallProbe( {
+					failureMessage: e instanceof Error ? e.message : String( e ),
+				} );
+			}
+		} );
+
 	const onSave = () =>
 		run( async () => {
 			const rid = ++wallProbeRequestId.current;
@@ -247,64 +362,7 @@ function PaywallScopeCard( { saved, save } ) {
 			if ( ! Object.prototype.hasOwnProperty.call( data, 'probe' ) ) {
 				return;
 			}
-			if ( data.probe === null ) {
-				setWallProbe( {
-					infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
-				} );
-				return;
-			}
-			if ( data.probe?.reason === 'no_matching_post' ) {
-				setWallProbe( {
-					infoMessage: __(
-						'Paywall probe skipped: no published post matches the current scope.',
-						'simple-x402'
-					),
-				} );
-				return;
-			}
-			if ( ! data.probe?.url || ! data.probe?.nonce ) {
-				return;
-			}
-			if ( ! String( merged.selected_facilitator_id ?? '' ).trim() ) {
-				setWallProbe( {
-					infoMessage: __(
-						'Paywall probe skipped: choose a facilitator so the paywall can respond.',
-						'simple-x402'
-					),
-				} );
-				return;
-			}
-
-			setWallProbePending( true );
-			const t0 = performance.now();
-			try {
-				const err = await runPaywallProbe( data.probe );
-				if ( rid !== wallProbeRequestId.current ) {
-					return;
-				}
-				const durationMs = Math.round( performance.now() - t0 );
-				if ( err ) {
-					setWallProbe( { failureMessage: err } );
-				} else {
-					setWallProbe( { success: true, durationMs } );
-				}
-			} catch ( e ) {
-				if ( rid !== wallProbeRequestId.current ) {
-					return;
-				}
-				const detail = e instanceof Error ? e.message : String( e );
-				setWallProbe( {
-					failureMessage: sprintf(
-						/* translators: %s: Error detail (e.g. network failure). */
-						__( 'Paywall probe failed: %s', 'simple-x402' ),
-						detail
-					),
-				} );
-			} finally {
-				if ( rid === wallProbeRequestId.current ) {
-					setWallProbePending( false );
-				}
-			}
+			await runPaywallProbeFollowThrough( data.probe, rid, merged );
 		} );
 
 	return (
@@ -334,8 +392,22 @@ function PaywallScopeCard( { saved, save } ) {
 						if ( 'termId' in edits ) setTermId( Number( edits.termId ) );
 					} }
 				/>
-				{ ( wallProbePending || wallProbe ) && (
-					<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
+				<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
+					<Button
+						variant="secondary"
+						size="compact"
+						type="button"
+						icon={ boltIcon }
+						iconSize={ 16 }
+						onClick={ onTestPaywall }
+						disabled={ paywallTestDisabled || wallProbePending || saving }
+						accessibleWhenDisabled
+					>
+						{ wallProbePending
+							? __( 'Running check…', 'simple-x402' )
+							: __( 'Test paywall response', 'simple-x402' ) }
+					</Button>
+					{ ( wallProbePending || wallProbe ) && (
 						<DiagnosticProbeLine
 							pending={ wallProbePending }
 							success={ wallProbe?.success === true }
@@ -343,8 +415,8 @@ function PaywallScopeCard( { saved, save } ) {
 							failureMessage={ wallProbe?.failureMessage }
 							infoMessage={ wallProbe?.infoMessage }
 						/>
-					</HStack>
-				) }
+					) }
+				</HStack>
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
@@ -512,6 +584,9 @@ function FacilitatorCard( { saved, save } ) {
 		( '' !== facilitator && ! isShallowEqual( slot, savedSlot ) );
 
 	const runTest = async () => {
+		if ( ! facilitator ) {
+			return;
+		}
 		const requestId = ++probeRequestId.current;
 		setTesting( true );
 		setProbe( null );
@@ -552,6 +627,9 @@ function FacilitatorCard( { saved, save } ) {
 			const { values: merged } = await save( partial );
 			setFacilitator( merged.selected_facilitator_id || '' );
 			setSlots( merged.facilitators || {} );
+			if ( facilitator ) {
+				await runTest();
+			}
 		} );
 
 	return (
