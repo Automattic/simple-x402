@@ -23,12 +23,21 @@ use SimpleX402\Settings\SettingsRepository;
  *                         `bots` requires the request's User-Agent to match a
  *                         known crawler, unless `paywall_probe` is set in
  *                         context (valid settings self-check — same trust as
- *                         the probe nonce header on the controller).
+ *                         the probe nonce header on the controller) or
+ *                         {@see self::CTX_KEY_ADMIN_BAR_SCOPE} is set (admin bar
+ *                         only: "is this post in the configured paywall mode?").
  *
  * Mode is checked first so the disabled state short-circuits before any
  * audience or post lookup.
  */
 final class DefaultPaywallRule {
+
+	/**
+	 * Request context key: when set (truthy), `bots` audience does not
+	 * short-circuit humans — used by the admin bar so editors can see
+	 * in-scope posts while audience remains "only bots" for real requests.
+	 */
+	public const CTX_KEY_ADMIN_BAR_SCOPE = 'admin_bar_scope';
 
 	public function __construct(
 		private readonly SettingsRepository $settings,
@@ -49,6 +58,7 @@ final class DefaultPaywallRule {
 		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience()
 			&& empty( $ctx['paywall_probe'] )
 			&& ! $this->bots->is_bot()
+			&& empty( $ctx[ self::CTX_KEY_ADMIN_BAR_SCOPE ] )
 		) {
 			return null;
 		}

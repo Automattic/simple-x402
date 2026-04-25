@@ -155,6 +155,16 @@ final class DefaultPaywallRuleTest extends TestCase {
 		$this->assertNull( $rule( null, array( 'post_id' => 7 ) ) );
 	}
 
+	public function test_audience_bots_allows_human_when_admin_bar_scope_set(): void {
+		$this->set_options( array( 'paywall_audience' => SettingsRepository::AUDIENCE_BOTS ) );
+		$GLOBALS['__sx402_terms'] = array( array( self::DEFAULT_TERM_ID, 'category', 7 ) );
+		$rule                     = $this->make_rule( self::HUMAN_UA );
+		$this->assertSame(
+			array( 'price' => '0.01', 'ttl' => 86400 ),
+			$rule( null, array( 'post_id' => 7, DefaultPaywallRule::CTX_KEY_ADMIN_BAR_SCOPE => true ) )
+		);
+	}
+
 	public function test_audience_bots_respects_mode_and_skips_non_matching_post(): void {
 		// Bot visiting a singular page that does NOT match the paywall category
 		// must NOT be gated — audience decides who, mode decides which posts.
