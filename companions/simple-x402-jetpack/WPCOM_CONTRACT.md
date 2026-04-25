@@ -103,9 +103,26 @@ Two conventions, both get parsed into the plugin's `error` field for display to 
 
 Anything else (missing both `error` and `message`) surfaces as `HTTP {status}`.
 
+## Managed pool `payTo` (WordPress.com path)
+
+For the `wpcom_x402` connector, the main plugin resolves `paymentRequirements.payTo` from the filter `simple_x402_managed_pool_pay_to` when non-empty. The Jetpack companion supplies an address from the environment variable `SIMPLE_X402_WPCOM_POOL_ADDRESS` (production would set this to the shared receive wallet). Site owners then **do not** enter a receiving wallet in wp-admin for that facilitator.
+
+The facilitator `/verify` and `/settle` bodies are unchanged; `payTo` inside `paymentRequirements` must still match what the facilitator expects on-chain.
+
+## Ledger reporting (site plugin)
+
+After a successful settle, the main plugin:
+
+1. Fires `do_action( 'simple_x402_payment_settled', $context )` with keys such as `connector_id`, `post_id`, `path`, `transaction`, `network`, `amount`, `resource_url`, `pay_to`, `payer_wallet`.
+2. Optionally POSTs JSON to the URL returned by `apply_filters( 'simple_x402_ledger_report_url', '', $context )` (non-blocking). The companion does **not** set this filter; Dotcom can document a URL when the ledger API exists.
+
+Duplicate `transaction` values within ~48h are ignored for the action + HTTP path so retries do not double-count.
+
+If WordPress.com prefers to own attribution entirely, the wpcom `/settle` implementation can call the ledger instead and the site plugin can stop doing (2) or both — product decision, not wire format.
+
 ## What the plugin does NOT expect the wpcom side to do
 
-- **On-chain fee splits.** The prototype is pass-through — payments settle directly to the seller's wallet as provided in `paymentRequirements`. If a platform fee is eventually added (splitter contract, off-chain invoicing), it's a server-side concern and doesn't change this contract unless `paymentRequirements` grows a new field.
+- **On-chain fee splits.** The default integration is pass-through to `paymentRequirements.payTo` (seller wallet or managed pool address above). If a platform fee is eventually added (splitter contract, off-chain invoicing), it's a server-side concern and doesn't change this contract unless `paymentRequirements` grows a new field.
 - **Scope-gating beyond what Jetpack already provides.** A dedicated `x402` scope can be added later but isn't required for v0.
 - **Origin/referer validation for clone-DB protection.** The plugin doesn't include any origin signal beyond what Jetpack's signature carries. If clone-protection is desired, the wpcom endpoint stores `site_url` at first-settle and checks the `Origin`/`Referer` header against it on every subsequent call.
 

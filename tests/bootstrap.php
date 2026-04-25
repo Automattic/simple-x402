@@ -516,6 +516,13 @@ if ( ! function_exists( 'add_action' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'do_action' ) ) {
+	function do_action( string $hook, mixed ...$args ): void {
+		foreach ( $GLOBALS['__sx402_actions'][ $hook ] ?? array() as $cb ) {
+			$cb( ...$args );
+		}
+	}
+}
 if ( ! class_exists( 'WP_Admin_Bar' ) ) {
 	class WP_Admin_Bar {
 		/** @var array<int,array<string,mixed>> */
@@ -640,6 +647,7 @@ if ( ! class_exists( 'Automattic\\Jetpack\\Connection\\Client' ) ) {
 $GLOBALS['__sx402_options']    = array();
 $GLOBALS['__sx402_transients'] = array();
 $GLOBALS['__sx402_filters']    = array();
+$GLOBALS['__sx402_actions']    = array();
 $GLOBALS['__sx402_http']       = null;
 $GLOBALS['__sx402_connectors'] = array();
 $GLOBALS['__sx402_jp']         = null;

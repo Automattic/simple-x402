@@ -46,7 +46,13 @@ final class TestConnectionAjax {
 
 		$client = $this->resolver->resolve( $id );
 		if ( null === $client ) {
-			wp_send_json_error( array( 'error' => 'unknown_connector', 'connector_id' => $id ), 404 );
+			wp_send_json_error(
+				array(
+					'error'        => 'unknown_connector',
+					'connector_id' => $id,
+				),
+				404
+			);
 			return;
 		}
 

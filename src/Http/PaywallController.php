@@ -13,6 +13,7 @@ use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaymentRequirementsBuilder;
+use SimpleX402\Services\PaymentSettlementNotifier;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\X402HeaderCodec;
 use SimpleX402\Settings\SettingsRepository;
@@ -43,12 +44,21 @@ final class PaywallController {
 	private ?Facilitator $facilitator_svc        = null;
 	private ?PaymentRequirementsBuilder $builder = null;
 
+	private ?PaymentSettlementNotifier $settlement_notifier;
+
 	public function __construct(
 		private readonly RuleResolver $rules,
 		private readonly GrantStore $grants,
 		private readonly SettingsRepository $settings,
 		private readonly FacilitatorResolver $resolver,
-	) {}
+		?PaymentSettlementNotifier $settlement_notifier = null,
+	) {
+		$this->settlement_notifier = $settlement_notifier;
+	}
+
+	private function settlement_notifier(): PaymentSettlementNotifier {
+		return $this->settlement_notifier ??= new PaymentSettlementNotifier();
+	}
 
 	/**
 	 * Resolve the active Facilitator from the selected connector, or null if
@@ -118,7 +128,7 @@ final class PaywallController {
 		}
 
 		$requirements = $this->builder( $facilitator )->build(
-			$this->settings->wallet_address(),
+			$this->settings->resolved_pay_to_address(),
 			$rule['price'],
 			home_url( $request['path'] ),
 			$rule['description']
@@ -174,6 +184,20 @@ final class PaywallController {
 				array( 'transaction' => $settle['transaction'] )
 			);
 		}
+
+		$this->settlement_notifier()->notify(
+			array(
+				'connector_id' => $this->settings->selected_facilitator_id(),
+				'post_id'      => $request['post_id'],
+				'path'         => $request['path'],
+				'transaction'  => (string) ( $settle['transaction'] ?? '' ),
+				'network'      => (string) ( $settle['network'] ?? '' ),
+				'amount'       => $rule['price'],
+				'resource_url' => home_url( $request['path'] ),
+				'pay_to'       => (string) ( $requirements['payTo'] ?? '' ),
+				'payer_wallet' => $wallet,
+			)
+		);
 	}
 
 	/**

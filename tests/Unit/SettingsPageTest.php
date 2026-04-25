@@ -34,6 +34,8 @@ final class SettingsPageTest extends TestCase {
 		$this->assertIsArray( $boot );
 		$this->assertSame( SettingsRepository::OPTION_NAME, $boot['option'] );
 		$this->assertSame( SettingsRepository::PAYWALL_MODE_CATEGORY, $boot['modeCategory'] );
+		$this->assertArrayHasKey( 'managedWalletFacilitators', $boot );
+		$this->assertSame( array(), $boot['managedWalletFacilitators'] );
 	}
 
 	public function test_enqueue_assets_skips_other_admin_pages(): void {
