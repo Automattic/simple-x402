@@ -116,7 +116,7 @@ After a successful settle, the main plugin:
 1. Fires `do_action( 'simple_x402_payment_settled', $context )` with keys such as `connector_id`, `post_id`, `path`, `transaction`, `network`, `amount`, `resource_url`, `pay_to`, `payer_wallet`.
 2. Optionally POSTs JSON to the URL returned by `apply_filters( 'simple_x402_ledger_report_url', '', $context )` (non-blocking). The companion does **not** set this filter; Dotcom can document a URL when the ledger API exists.
 
-Duplicate `transaction` values within ~48h are ignored for the action + HTTP path so retries do not double-count.
+The plugin does **not** de-duplicate repeated `notify()` calls (same `transaction` may surface from retries or concurrency). The **ledger API** must treat `transaction` (or another stable id in `$context`) as idempotent so duplicate HTTP deliveries or duplicate hook-driven writes do not double-count.
 
 If WordPress.com prefers to own attribution entirely, the wpcom `/settle` implementation can call the ledger instead and the site plugin can stop doing (2) or both — product decision, not wire format.
 

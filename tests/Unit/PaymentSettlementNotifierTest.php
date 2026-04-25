@@ -10,13 +10,12 @@ use SimpleX402\Services\PaymentSettlementNotifier;
 final class PaymentSettlementNotifierTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_actions']    = array();
-		$GLOBALS['__sx402_filters']    = array();
-		$GLOBALS['__sx402_transients'] = array();
-		$GLOBALS['__sx402_http']       = null;
+		$GLOBALS['__sx402_actions']  = array();
+		$GLOBALS['__sx402_filters']  = array();
+		$GLOBALS['__sx402_http']    = null;
 	}
 
-	public function test_fires_settled_action_once_per_transaction(): void {
+	public function test_each_notify_fires_action_even_when_transaction_repeated(): void {
 		$hits = 0;
 		add_action(
 			FacilitatorHooks::PAYMENT_SETTLED,
@@ -26,25 +25,12 @@ final class PaymentSettlementNotifierTest extends TestCase {
 		);
 		$ctx = array(
 			'transaction' => '0xabc',
-			'post_id'     => 1,
-			'amount'      => '0.01',
-		);
-		( new PaymentSettlementNotifier() )->notify( $ctx );
-		( new PaymentSettlementNotifier() )->notify( $ctx );
-		$this->assertSame( 1, $hits );
-	}
-
-	public function test_empty_transaction_allows_multiple_notifications(): void {
-		$hits = 0;
-		add_action(
-			FacilitatorHooks::PAYMENT_SETTLED,
-			static function () use ( &$hits ): void {
-				++$hits;
-			}
+			'post_id'      => 1,
+			'amount'       => '0.01',
 		);
 		$n = new PaymentSettlementNotifier();
-		$n->notify( array( 'post_id' => 1 ) );
-		$n->notify( array( 'post_id' => 1 ) );
+		$n->notify( $ctx );
+		$n->notify( $ctx );
 		$this->assertSame( 2, $hits );
 	}
 }
