@@ -9,9 +9,10 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use SimpleX402\Admin\SettingsPage;
 use SimpleX402\Services\DefaultPaywallRule;
 use SimpleX402\Services\RuleResolver;
-use SimpleX402\Admin\SettingsPage;
+use SimpleX402\Settings\SettingsRepository;
 
 /**
  * Adds a top admin-bar node when an admin is viewing a singular post in the
@@ -28,7 +29,10 @@ final class PaywallIndicator {
 
 	public const NODE_ID = 'simple-x402-paywalled';
 
-	public function __construct( private readonly RuleResolver $rules ) {}
+	public function __construct(
+		private readonly RuleResolver $rules,
+		private readonly SettingsRepository $settings,
+	) {}
 
 	/**
 	 * Attach hooks.
@@ -72,7 +76,7 @@ final class PaywallIndicator {
 		$bar->add_node(
 			array(
 				'id'    => self::NODE_ID,
-				'title' => esc_html__( 'Paywall active', 'simple-x402' ),
+				'title' => $this->node_title( $rule ),
 				'href'  => admin_url( 'options-general.php?page=' . SettingsPage::MENU_SLUG ),
 				'meta'  => array(
 					'title' => esc_attr__(
@@ -80,6 +84,29 @@ final class PaywallIndicator {
 						'simple-x402'
 					),
 				),
+			)
+		);
+	}
+
+	/**
+	 * @param array{price:string,ttl:int,description:string} $rule Rule normalised by {@see RuleResolver::resolve()}.
+	 */
+	private function node_title( array $rule ): string {
+		$price = (string) $rule['price'];
+		if ( SettingsRepository::AUDIENCE_BOTS === $this->settings->paywall_audience() ) {
+			return esc_html(
+				sprintf(
+					/* translators: %s: decimal USDC amount (e.g. 0.01). */
+					__( 'Paywalled (bots only, $%s)', 'simple-x402' ),
+					$price
+				)
+			);
+		}
+		return esc_html(
+			sprintf(
+				/* translators: %s: decimal USDC amount (e.g. 0.01). */
+				__( 'Paywalled (everyone, $%s)', 'simple-x402' ),
+				$price
 			)
 		);
 	}
