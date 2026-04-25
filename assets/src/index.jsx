@@ -753,8 +753,11 @@ function SettingsApp() {
 	// can run follow-up checks (e.g. paywall probe) without a second request.
 	const save = async ( partial ) => {
 		const data = await saveFields( partial );
-		const mergedValues = { ...saved, ...data.values };
-		setSaved( mergedValues );
+		let mergedValues;
+		setSaved( ( prev ) => {
+			mergedValues = { ...prev, ...data.values };
+			return mergedValues;
+		} );
 		return { values: mergedValues, ajaxData: data };
 	};
 
