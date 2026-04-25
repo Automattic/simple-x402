@@ -77,6 +77,54 @@ async function runPaywallProbe( probe ) {
 	return null;
 }
 
+/**
+ * Shared result line for facilitator "Test connection" and paywall self-check.
+ *
+ * @param {object} props
+ * @param {boolean} props.pending
+ * @param {boolean} [props.success]
+ * @param {number} [props.durationMs]
+ * @param {string} [props.failureMessage]
+ * @param {string} [props.infoMessage] Skipped / informational (no ✓/✗).
+ */
+function DiagnosticProbeLine( { pending, success, durationMs, failureMessage, infoMessage } ) {
+	if ( pending ) {
+		return (
+			<Text size={ 13 } variant="muted">
+				{ __( 'Running check…', 'simple-x402' ) }
+			</Text>
+		);
+	}
+	if ( infoMessage ) {
+		return (
+			<Text size={ 13 } variant="muted">
+				{ infoMessage }
+			</Text>
+		);
+	}
+	if ( success ) {
+		return (
+			<Text size={ 13 } variant="muted">
+				{ durationMs != null
+					? sprintf(
+						/* translators: %d: round-trip time in milliseconds. */
+						__( '✓ Succeeded in %dms', 'simple-x402' ),
+						durationMs
+					)
+					: __( '✓ Succeeded', 'simple-x402' ) }
+			</Text>
+		);
+	}
+	if ( failureMessage ) {
+		return (
+			<Text size={ 13 } variant="muted">
+				{ `✗ ${ failureMessage }` }
+			</Text>
+		);
+	}
+	return null;
+}
+
 function SaveFooter( { disabled, saving, error, onSave } ) {
 	return (
 		<CardFooter className="simple-x402-page__card-footer">
@@ -174,6 +222,9 @@ const PAYWALL_MODE_FIELDS = [
 function PaywallScopeCard( { saved, save } ) {
 	const [ paywallMode, setPaywallMode ] = useState( saved.paywall_mode );
 	const [ termId, setTermId ] = useState( saved.paywall_category_term_id );
+	const [ wallProbePending, setWallProbePending ] = useState( false );
+	const [ wallProbe, setWallProbe ] = useState( null );
+	const wallProbeRequestId = useRef( 0 );
 	const { saving, error, run } = useSave();
 
 	const isDirty =
@@ -182,12 +233,78 @@ function PaywallScopeCard( { saved, save } ) {
 
 	const onSave = () =>
 		run( async () => {
-			const merged = await save( {
+			const rid = ++wallProbeRequestId.current;
+			setWallProbe( null );
+			setWallProbePending( false );
+
+			const { values: merged, ajaxData: data } = await save( {
 				paywall_mode: paywallMode,
 				paywall_category_term_id: termId,
 			} );
 			setPaywallMode( merged.paywall_mode );
 			setTermId( merged.paywall_category_term_id );
+
+			if ( ! Object.prototype.hasOwnProperty.call( data, 'probe' ) ) {
+				return;
+			}
+			if ( data.probe === null ) {
+				setWallProbe( {
+					infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
+				} );
+				return;
+			}
+			if ( data.probe?.reason === 'no_matching_post' ) {
+				setWallProbe( {
+					infoMessage: __(
+						'Paywall probe skipped: no published post matches the current scope.',
+						'simple-x402'
+					),
+				} );
+				return;
+			}
+			if ( ! data.probe?.url || ! data.probe?.nonce ) {
+				return;
+			}
+			if ( ! String( merged.selected_facilitator_id ?? '' ).trim() ) {
+				setWallProbe( {
+					infoMessage: __(
+						'Paywall probe skipped: choose a facilitator so the paywall can respond.',
+						'simple-x402'
+					),
+				} );
+				return;
+			}
+
+			setWallProbePending( true );
+			const t0 = performance.now();
+			try {
+				const err = await runPaywallProbe( data.probe );
+				if ( rid !== wallProbeRequestId.current ) {
+					return;
+				}
+				const durationMs = Math.round( performance.now() - t0 );
+				if ( err ) {
+					setWallProbe( { failureMessage: err } );
+				} else {
+					setWallProbe( { success: true, durationMs } );
+				}
+			} catch ( e ) {
+				if ( rid !== wallProbeRequestId.current ) {
+					return;
+				}
+				const detail = e instanceof Error ? e.message : String( e );
+				setWallProbe( {
+					failureMessage: sprintf(
+						/* translators: %s: Error detail (e.g. network failure). */
+						__( 'Paywall probe failed: %s', 'simple-x402' ),
+						detail
+					),
+				} );
+			} finally {
+				if ( rid === wallProbeRequestId.current ) {
+					setWallProbePending( false );
+				}
+			}
 		} );
 
 	return (
@@ -210,10 +327,24 @@ function PaywallScopeCard( { saved, save } ) {
 						],
 					} }
 					onChange={ ( edits ) => {
+						wallProbeRequestId.current++;
+						setWallProbe( null );
+						setWallProbePending( false );
 						if ( 'paywallMode' in edits ) setPaywallMode( edits.paywallMode );
 						if ( 'termId' in edits ) setTermId( Number( edits.termId ) );
 					} }
 				/>
+				{ ( wallProbePending || wallProbe ) && (
+					<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
+						<DiagnosticProbeLine
+							pending={ wallProbePending }
+							success={ wallProbe?.success === true }
+							durationMs={ wallProbe?.durationMs }
+							failureMessage={ wallProbe?.failureMessage }
+							infoMessage={ wallProbe?.infoMessage }
+						/>
+					</HStack>
+				) }
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
@@ -240,7 +371,7 @@ function AudienceCard( { saved, save } ) {
 
 	const onSave = () =>
 		run( async () => {
-			const merged = await save( { paywall_audience: audience } );
+			const { values: merged } = await save( { paywall_audience: audience } );
 			setAudience( merged.paywall_audience );
 		} );
 
@@ -289,7 +420,7 @@ function PricingCard( { saved, save } ) {
 
 	const onSave = () =>
 		run( async () => {
-			const merged = await save( { default_price: price } );
+			const { values: merged } = await save( { default_price: price } );
 			setPrice( merged.default_price );
 		} );
 
@@ -418,7 +549,7 @@ function FacilitatorCard( { saved, save } ) {
 			if ( '' !== facilitator ) {
 				partial.facilitators = { [ facilitator ]: slot };
 			}
-			const merged = await save( partial );
+			const { values: merged } = await save( partial );
 			setFacilitator( merged.selected_facilitator_id || '' );
 			setSlots( merged.facilitators || {} );
 		} );
@@ -464,18 +595,19 @@ function FacilitatorCard( { saved, save } ) {
 								disabled={ testing }
 								accessibleWhenDisabled
 							>
-								{ testing ? __( 'Testing…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
+								{ testing ? __( 'Running check…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
 							</Button>
-							{ probe && (
-								<Text size={ 13 } variant="muted">
-									{ probe.ok
-										? sprintf(
-											/* translators: %d: probe duration in milliseconds. */
-											__( '✓ Succeeded in %dms', 'simple-x402' ),
-											probe.duration_ms ?? 0
-										)
-										: `✗ ${ probe.error || __( 'Unreachable', 'simple-x402' ) }` }
-								</Text>
+							{ ( testing || probe ) && (
+								<DiagnosticProbeLine
+									pending={ testing && ! probe }
+									success={ probe?.ok === true }
+									durationMs={ probe?.ok ? probe.duration_ms : undefined }
+									failureMessage={
+										probe && ! probe.ok
+											? ( probe.error || __( 'Unreachable', 'simple-x402' ) )
+											: undefined
+									}
+								/>
 							) }
 						</HStack>
 						<div className="simple-x402-page__divider" />
@@ -516,62 +648,17 @@ function FacilitatorCard( { saved, save } ) {
 
 function SettingsApp() {
 	const [ saved, setSaved ] = useState( config.values );
-	const [ probeMessage, setProbeMessage ] = useState( null );
 
 	// Shared save engine. Fires one AJAX call, merges the server-canonical
 	// response into `saved` so every card's isDirty check is evaluated against
 	// whatever the sanitizer actually stored (which may differ from what we
-	// sent, e.g. bad prices → 0.01).
+	// sent, e.g. bad prices → 0.01). Returns `{ values, ajaxData }` so cards
+	// can run follow-up checks (e.g. paywall probe) without a second request.
 	const save = async ( partial ) => {
-		setProbeMessage( null );
 		const data = await saveFields( partial );
-		// Partial AJAX payloads can omit unchanged keys; merge with prior state
-		// so probe logic sees facilitator/audience from the last full snapshot.
 		const mergedValues = { ...saved, ...data.values };
 		setSaved( mergedValues );
-		if ( Object.prototype.hasOwnProperty.call( data, 'probe' ) ) {
-			if ( data.probe === null ) {
-				setProbeMessage(
-					__( 'Paywall mode is off — no live probe run.', 'simple-x402' )
-				);
-			} else if ( data.probe?.url && data.probe?.nonce ) {
-				if ( ! String( mergedValues.selected_facilitator_id ?? '' ).trim() ) {
-					setProbeMessage(
-						__(
-							'Paywall probe skipped: choose a facilitator so the paywall can respond.',
-							'simple-x402'
-						)
-					);
-				} else {
-					void runPaywallProbe( data.probe )
-						.then( ( err ) => {
-							setProbeMessage(
-								err
-									? err
-									: __( 'Paywall probe: OK (HTTP 402 with JSON).', 'simple-x402' )
-							);
-						} )
-						.catch( ( e ) => {
-							const detail = e instanceof Error ? e.message : String( e );
-							setProbeMessage(
-								sprintf(
-									/* translators: %s: Error detail (e.g. network failure). */
-									__( 'Paywall probe failed: %s', 'simple-x402' ),
-									detail
-								)
-							);
-						} );
-				}
-			} else if ( data.probe?.reason === 'no_matching_post' ) {
-				setProbeMessage(
-					__(
-						'Paywall probe skipped: no published post matches the current scope.',
-						'simple-x402'
-					)
-				);
-			}
-		}
-		return mergedValues;
+		return { values: mergedValues, ajaxData: data };
 	};
 
 	const noticesRef = useRef( null );
@@ -599,11 +686,6 @@ function SettingsApp() {
 	return (
 		<div className="simple-x402-page__content">
 			<div className="simple-x402-page__notices" ref={ noticesRef } />
-			{ probeMessage && (
-				<Text size={ 13 } variant="muted" className="simple-x402-page__probe-hint">
-					{ probeMessage }
-				</Text>
-			) }
 			<VStack spacing={ 6 }>
 				<PaywallScopeCard saved={ saved } save={ save } />
 				<AudienceCard saved={ saved } save={ save } />
