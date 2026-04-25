@@ -52,6 +52,7 @@ final class PaywallIndicatorTest extends TestCase {
 
 		$this->indicator()->add_node( $bar );
 
+		$this->assertCount( 1, $bar->nodes );
 		$this->assertSame( 'Paywalled (everyone, $0.01)', $bar->nodes[0]['title'] );
 	}
 
