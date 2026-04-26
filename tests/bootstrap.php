@@ -263,7 +263,11 @@ if ( ! function_exists( 'get_post' ) ) {
 	}
 }
 if ( ! function_exists( 'get_bloginfo' ) ) {
-	function get_bloginfo( string $show = '', bool $filter = true ): string {
+	/**
+	 * @param string $show   Blog info key (e.g. 'name').
+	 * @param string $filter Same contract as core: 'raw' | 'display' | …
+	 */
+	function get_bloginfo( string $show = '', string $filter = 'raw' ): string {
 		return (string) ( $GLOBALS['__sx402_bloginfo'][ $show ] ?? '' );
 	}
 }

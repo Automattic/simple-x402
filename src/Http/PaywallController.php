@@ -296,7 +296,7 @@ final class PaywallController {
 			$request
 		);
 
-		$site = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name', false ) : '';
+		$site = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : '';
 		$site = '' !== $site ? '<p class="sx402-site">' . esc_html( $site ) . '</p>' : '';
 
 		$excerpt_block = '' !== $excerpt
