@@ -52,7 +52,7 @@ const PROBE_HEADER = 'X-Simple-X402-Probe';
 
 /**
  * @param {{ url: string, nonce: string }} probe
- * @returns {Promise<string|null>} null if the response looks like a healthy paywall 402 JSON.
+ * @returns {Promise<string|null>} null if the response looks like a healthy paywall 402 (JSON or HTML body).
  */
 async function runPaywallProbe( probe ) {
 	const resp = await fetch( probe.url, {
@@ -61,19 +61,29 @@ async function runPaywallProbe( probe ) {
 		cache: 'no-store',
 		headers: { [ PROBE_HEADER ]: probe.nonce },
 	} );
-	const ct = resp.headers.get( 'content-type' ) || '';
-	// Phase B will add HTML 402 bodies; relax content-type / body checks then.
-	if ( resp.status !== 402 || ! ct.includes( 'json' ) ) {
+	if ( resp.status !== 402 ) {
 		return sprintf(
-			/* translators: %s: HTTP status code or "unknown". */
-			__( 'Paywall probe: expected HTTP 402 with JSON, got status %s.', 'simple-x402' ),
+			/* translators: %s: HTTP status code. */
+			__( 'Paywall probe: expected HTTP 402, got status %s.', 'simple-x402' ),
 			String( resp.status )
 		);
 	}
-	try {
-		await resp.json();
-	} catch ( _ ) {
-		return __( 'Paywall probe: response was not valid JSON.', 'simple-x402' );
+	const ct = ( resp.headers.get( 'content-type' ) || '' ).toLowerCase();
+	const isJson = ct.includes( 'application/json' );
+	const isHtml = ct.includes( 'text/html' );
+	if ( ! isJson && ! isHtml ) {
+		return sprintf(
+			/* translators: %s: Content-Type header value or placeholder. */
+			__( 'Paywall probe: expected HTTP 402 with JSON or HTML body, got Content-Type %s.', 'simple-x402' ),
+			resp.headers.get( 'content-type' ) || '(missing)'
+		);
+	}
+	if ( isJson ) {
+		try {
+			await resp.json();
+		} catch ( _ ) {
+			return __( 'Paywall probe: response was not valid JSON.', 'simple-x402' );
+		}
 	}
 	return null;
 }

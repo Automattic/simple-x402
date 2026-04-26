@@ -72,13 +72,13 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ### Phase B — 402 response negotiation
 
-- [ ] Split `PaywallController::respond_402` (or parallel paths) to emit:
+- [x] Split `PaywallController::respond_402` (or parallel paths) to emit:
   - same **402** + **`PAYMENT-REQUIRED`** header;
-  - **JSON** body (existing shape) vs **HTML** minimal template, chosen from **client presentation** + **`paywall_audience`** (see matrix: with **`everyone`**, unpaid **non-bot document** clients get the **same HTML 402** as HTML-style bots).
-- [ ] HTML template: post **excerpt** (from `$post_id` / queried post), site title optional, payment line with **configured price** + note to inspect x402 headers.
-- [ ] Filters, e.g. `simple_x402_paywall_html_402_body` / `simple_x402_paywall_excerpt_text` (exact names TBD in PR) for themes.
-- [ ] Integration tests: e.g. `Accept` + bot UA → JSON body; `Sec-Fetch-Mode` navigate + document + bot UA → HTML contains excerpt; with **`everyone`**, equivalent **non-bot document** case → **HTML 402** (not raw JSON).
-- [ ] **Admin paywall probe (Phase D):** after Phase B, the live probe may see **HTML** `Content-Type` when testing in a browser-style context—update probe success criteria (don’t assume JSON-only 402 forever).
+  - **JSON** body (existing shape) vs **HTML** minimal template, chosen from **client presentation** (document navigation → HTML; otherwise JSON). **`paywall_audience`** still controls **who** is paywalled via rules; with **`everyone`**, unpaid **non-bot document** clients get the **same HTML 402** as document-style bots when `Sec-Fetch-Mode`/`Dest` indicate a document navigation.
+- [x] HTML template: post **excerpt** (from `$post_id` / queried post), site title optional, payment line with **configured price** + note to inspect x402 headers.
+- [x] Filters: `simple_x402_paywall_html_402_body` (`PaywallController::HTML_402_BODY_FILTER`), `simple_x402_paywall_excerpt_text` (`PaywallController::EXCERPT_TEXT_FILTER`).
+- [x] Integration tests: `Accept` + bot UA (no document fetch metadata) → JSON body; `Sec-Fetch-Mode` navigate + document + bot UA → HTML contains excerpt; with **`everyone`**, non-bot document navigation → **HTML 402**; non-bot JSON `Accept` → JSON.
+- [x] **Admin paywall probe:** `runPaywallProbe()` accepts **402** with **`application/json`** or **`text/html`** body (JSON path still validates JSON parse).
 
 ### Phase C — Audience & facilitator (staging; keep controls for testing)
 
@@ -98,7 +98,7 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 - [x] Replace two separate probe entry points with one **primary** action that runs facilitator test then paywall probe; keep detailed step output (expandable or two lines under one button).
 - [x] i18n strings; avoid losing nonce / error surfacing from current flows.
 
-**Phase D / Phase B note:** The paywall live probe still expects **HTTP 402 + JSON**; Phase B (HTML 402 bodies) must relax client-side content-type / body checks in `runPaywallProbe()` when that ships.
+**Phase D / Phase B note:** The paywall live probe accepts **HTTP 402** with **JSON or HTML** `Content-Type` (see `runPaywallProbe()` in `assets/src/index.jsx`).
 
 ---
 
@@ -117,7 +117,7 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ## Open items (resolve in first implementing PR)
 
-1. **Ambiguous client** default (JSON vs HTML) when both/neither signals present—separate defaults for bot vs non-bot (`everyone`) if needed.
+1. ~~**Ambiguous client** default (JSON vs HTML) when both/neither signals present~~ **Phase B:** HTML 402 **only** when `document_navigation_intent` is true (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`). If that is false, body is **JSON** (including when `json_accept_intent` or `xml_http_request` is true, and when all three are false). When document intent is true, HTML wins even if `Accept` lists JSON.
 2. **HTML template** location: inline string in PHP vs small view file under `templates/` vs `wp_kses_post` + block template hook.
 3. **Human grant / payment path** (cookies, wallet, Woo, etc.)—out of scope for B except messaging in the HTML template.
 
@@ -125,6 +125,7 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ## Changelog
 
+- **2026-04-26** — Phase B: `PaywallController` negotiates **JSON vs HTML** 402 bodies from `PaywallClientProfile` (`document_navigation_intent` → HTML excerpt template; else JSON). Filters `simple_x402_paywall_excerpt_text`, `simple_x402_paywall_html_402_body`; admin paywall probe accepts HTML 402.
 - **2026-04-26** — Phase A: `PaywallClientProfile` classifier, stable `Accept` / `Sec-Fetch-*` keys on paywall requests, `simple_x402_paywall_client_profile` filter (402 body unchanged).
 - **2026-04-26** — Phase D: unified Settings → Simple x402 **Run checks** (facilitator connectivity, then paywall probe); per-step results in admin UI.
 - **2026-04-25** — Initial doc from agreed product decisions.

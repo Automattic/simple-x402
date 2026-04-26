@@ -29,8 +29,11 @@ final class PaywallControllerTest extends TestCase {
 					'simple_x402_test' => array( 'wallet_address' => '0xreceiver' ),
 				),
 				'default_price'           => '0.01',
+				'paywall_audience'        => SettingsRepository::AUDIENCE_BOTS,
 			),
 		);
+		$GLOBALS['__sx402_posts']    = array();
+		$GLOBALS['__sx402_bloginfo'] = array( 'name' => 'Example Site' );
 		// Default: one x402_facilitator connector, resolved via the filter.
 		$GLOBALS['__sx402_connectors'] = array(
 			'simple_x402_test' => array( 'type' => ConnectorRegistry::FACILITATOR_TYPE ),
@@ -67,7 +70,9 @@ final class PaywallControllerTest extends TestCase {
 	/**
 	 * Assert 402 JSON body includes requirements and the expected human-readable price (from the resolved rule).
 	 */
-	private function assert_402_body_has_price_and_requirements( string $expected_price ): void {
+	private function assert_402_json_body_has_price_and_requirements( string $expected_price ): void {
+		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+		$this->assertStringContainsString( 'application/json', $ct );
 		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
 		$this->assertIsArray( $body );
 		$this->assertSame( $expected_price, $body['price'] );
@@ -148,6 +153,9 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertTrue( $captured->is_bot );
 		$this->assertTrue( $captured->document_navigation_intent );
 		$this->assertTrue( $captured->json_accept_intent );
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+		$this->assertStringContainsString( 'text/html', $ct, 'Document navigation intent overrides JSON Accept for 402 body shape.' );
 	}
 
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {
@@ -167,7 +175,7 @@ final class PaywallControllerTest extends TestCase {
 		$decoded = X402HeaderCodec::decode( $GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] );
 		$this->assertSame( '0xreceiver', $decoded['payTo'] );
 		$this->assertSame( '10000', $decoded['maxAmountRequired'] );
-		$this->assert_402_body_has_price_and_requirements( '0.01' );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
 	}
 
@@ -353,6 +361,7 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
 		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
 		$this->assertIsArray( $body );
 		$this->assertSame( '0x1111111111111111111111111111111111111111', $body['requirements']['payTo'] );
@@ -464,7 +473,7 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_body_has_price_and_requirements( '0.01' );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
 		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
 		$this->assertIsArray( $body );
 		$this->assertSame( 'verify_failed', $body['error'] );
@@ -484,7 +493,7 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_body_has_price_and_requirements( '0.01' );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
 		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
 		$this->assertIsArray( $body );
 		$this->assertSame( 'invalid_signature_header', $body['error'] );
@@ -522,11 +531,109 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_body_has_price_and_requirements( '0.25' );
+		$this->assert_402_json_body_has_price_and_requirements( '0.25' );
 		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
 		$this->assertIsArray( $body );
 		$this->assertSame( 'settle_failed', $body['error'] );
 		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_bot_json_accept_without_document_navigation_serves_json_402(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$googlebot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(
+					'User-Agent'     => $googlebot,
+					'Accept'         => 'application/json',
+					'Sec-Fetch-Mode' => '',
+					'Sec-Fetch-Dest' => '',
+				),
+			)
+		);
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
+	}
+
+	public function test_bot_document_navigation_serves_html_402_with_excerpt(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_posts'][7] = array(
+			'post_type'    => 'post',
+			'post_status'  => 'publish',
+			'post_excerpt' => 'Teaser for bots and browsers.',
+		);
+		$googlebot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+		$this->controller()->handle(
+			array(
+				'path'    => '/p/7',
+				'method'  => 'GET',
+				'post_id' => 7,
+				'headers' => array(
+					'User-Agent'     => $googlebot,
+					'Accept'         => 'text/html',
+					'Sec-Fetch-Mode' => 'navigate',
+					'Sec-Fetch-Dest' => 'document',
+				),
+			)
+		);
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+		$this->assertStringContainsString( 'text/html', $ct );
+		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$this->assertStringContainsString( 'Teaser for bots and browsers.', $html );
+		$this->assertStringContainsString( '0.01', $html );
+		$this->assertArrayHasKey( 'PAYMENT-REQUIRED', $GLOBALS['__sx402_response']['headers'] );
+	}
+
+	public function test_everyone_audience_human_document_navigation_serves_html_402(): void {
+		$GLOBALS['__sx402_options']['simple_x402_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__sx402_posts'][42] = array(
+			'post_type'    => 'post',
+			'post_status'  => 'publish',
+			'post_excerpt' => 'Everyone mode excerpt.',
+		);
+		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+		$this->controller()->handle(
+			array(
+				'path'    => '/story',
+				'method'  => 'GET',
+				'post_id' => 42,
+				'headers' => array(
+					'User-Agent'     => $human_ua,
+					'Accept'         => 'text/html',
+					'Sec-Fetch-Mode' => 'navigate',
+					'Sec-Fetch-Dest' => 'document',
+				),
+			)
+		);
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertStringContainsString( 'text/html', (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' ) );
+		$this->assertStringContainsString( 'Everyone mode excerpt.', (string) $GLOBALS['__sx402_response']['body'] );
+	}
+
+	public function test_everyone_audience_human_json_accept_serves_json_402(): void {
+		$GLOBALS['__sx402_options']['simple_x402_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+		$this->controller()->handle(
+			array(
+				'path'    => '/api-ish',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(
+					'User-Agent'     => $human_ua,
+					'Accept'         => 'application/json',
+					'Sec-Fetch-Mode' => '',
+					'Sec-Fetch-Dest' => '',
+				),
+			)
+		);
+		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
 	}
 
 	/**
