@@ -62,6 +62,7 @@ async function runPaywallProbe( probe ) {
 		headers: { [ PROBE_HEADER ]: probe.nonce },
 	} );
 	const ct = resp.headers.get( 'content-type' ) || '';
+	// Phase B will add HTML 402 bodies; relax content-type / body checks then.
 	if ( resp.status !== 402 || ! ct.includes( 'json' ) ) {
 		return sprintf(
 			/* translators: %s: HTTP status code or "unknown". */
@@ -99,7 +100,40 @@ async function fetchPaywallProbeDescriptorFromServer() {
 }
 
 /**
- * Shared result line for facilitator "Test connection" and paywall self-check.
+ * @param {string} connectorId
+ * @returns {Promise<{ ok: boolean, duration_ms?: number, error?: string }>}
+ */
+async function runFacilitatorConnectivityAjax( connectorId ) {
+	const body = new FormData();
+	body.append( 'action', config.testConnection.action );
+	body.append( 'nonce', config.testConnection.nonce );
+	body.append( 'connector_id', connectorId );
+	const resp = await fetch( config.ajaxUrl, {
+		method: 'POST',
+		credentials: 'same-origin',
+		body,
+	} );
+	let json = null;
+	try {
+		json = await resp.json();
+	} catch ( _ ) {
+		return { ok: false, error: `request_failed_http_${ resp.status }` };
+	}
+	if ( json?.success && json.data ) {
+		return {
+			ok: json.data.ok === true,
+			duration_ms: json.data.duration_ms,
+			error: json.data.error,
+		};
+	}
+	return {
+		ok: false,
+		error: json?.data?.error || 'request_failed',
+	};
+}
+
+/**
+ * Shared result line for unified Run checks (facilitator connectivity + paywall probe).
  *
  * @param {object} props
  * @param {boolean} props.pending
@@ -240,117 +274,130 @@ const PAYWALL_MODE_FIELDS = [
 	},
 ];
 
-function PaywallScopeCard( { saved, save } ) {
-	const [ paywallMode, setPaywallMode ] = useState( saved.paywall_mode );
-	const [ termId, setTermId ] = useState( saved.paywall_category_term_id );
-	const [ wallProbePending, setWallProbePending ] = useState( false );
-	const [ wallProbe, setWallProbe ] = useState( null );
-	const wallProbeRequestId = useRef( 0 );
+/**
+ * @param {object} props
+ * @param {boolean} props.paywallDirty
+ * @param {boolean} props.facilitatorDirty
+ * @param {boolean} props.runChecksPending
+ * @param {() => void} props.onRunChecks
+ * @param {object|null} props.facilitatorCheck
+ * @param {object|null} props.paywallCheck
+ */
+function RunChecksCard( {
+	paywallDirty,
+	facilitatorDirty,
+	runChecksPending,
+	onRunChecks,
+	facilitatorCheck,
+	paywallCheck,
+} ) {
+	const showSteps =
+		runChecksPending ||
+		facilitatorCheck != null ||
+		paywallCheck != null;
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle
+					title={ __( 'Connection & paywall checks', 'simple-x402' ) }
+					subtitle={ __(
+						'Verify facilitator reachability, then probe the live paywall on a matching post.',
+						'simple-x402'
+					) }
+				/>
+			</CardHeader>
+			<CardBody>
+				<VStack spacing={ 3 }>
+					<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
+						<Button
+							variant="primary"
+							size="compact"
+							type="button"
+							icon={ boltIcon }
+							iconSize={ 16 }
+							onClick={ onRunChecks }
+							disabled={
+								paywallDirty || facilitatorDirty || runChecksPending
+							}
+							accessibleWhenDisabled
+							aria-busy={ runChecksPending }
+						>
+							{ runChecksPending
+								? __( 'Running checks…', 'simple-x402' )
+								: __( 'Run checks', 'simple-x402' ) }
+						</Button>
+					</HStack>
+					{ facilitatorDirty && (
+						<Text size={ 13 } variant="muted">
+							{ __(
+								'Save your facilitator settings before running checks.',
+								'simple-x402'
+							) }
+						</Text>
+					) }
+					{ paywallDirty && (
+						<Text size={ 13 } variant="muted">
+							{ __(
+								'Save your paywall scope changes before running checks.',
+								'simple-x402'
+							) }
+						</Text>
+					) }
+					{ showSteps && (
+						<VStack spacing={ 3 }>
+							<VStack spacing={ 0 } className="simple-x402-page__run-checks-step">
+								<Text size={ 12 } weight={ 600 } variant="muted">
+									{ __( '1. Facilitator connectivity', 'simple-x402' ) }
+								</Text>
+								<DiagnosticProbeLine
+									pending={ facilitatorCheck?.pending === true }
+									success={ facilitatorCheck?.success === true }
+									durationMs={ facilitatorCheck?.durationMs }
+									failureMessage={ facilitatorCheck?.failureMessage }
+									infoMessage={ facilitatorCheck?.infoMessage }
+								/>
+							</VStack>
+							<VStack spacing={ 0 } className="simple-x402-page__run-checks-step">
+								<Text size={ 12 } weight={ 600 } variant="muted">
+									{ __( '2. Paywall live probe', 'simple-x402' ) }
+								</Text>
+								<DiagnosticProbeLine
+									pending={ paywallCheck?.pending === true }
+									success={ paywallCheck?.success === true }
+									durationMs={ paywallCheck?.durationMs }
+									failureMessage={ paywallCheck?.failureMessage }
+									infoMessage={ paywallCheck?.infoMessage }
+								/>
+							</VStack>
+						</VStack>
+					) }
+				</VStack>
+			</CardBody>
+		</Card>
+	);
+}
+
+function PaywallScopeCard( {
+	saved,
+	save,
+	paywallMode,
+	setPaywallMode,
+	termId,
+	setTermId,
+	onPaywallFieldsChange,
+	beginPaywallSaveProbeSession,
+	runPaywallProbeFollowThrough,
+} ) {
 	const { saving, error, run } = useSave();
 
 	const isDirty =
 		paywallMode !== saved.paywall_mode ||
 		Number( termId ) !== Number( saved.paywall_category_term_id );
 
-	const paywallTestDisabled =
-		isDirty || saved.paywall_mode === config.modes.paywall.none;
-
-	const runPaywallProbeFollowThrough = async ( probeBlock, rid, mergedSnapshot ) => {
-		if ( probeBlock == null ) {
-			if ( rid !== wallProbeRequestId.current ) {
-				return;
-			}
-			setWallProbe( {
-				infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
-			} );
-			return;
-		}
-		if ( probeBlock?.reason === 'no_matching_post' ) {
-			if ( rid !== wallProbeRequestId.current ) {
-				return;
-			}
-			setWallProbe( {
-				infoMessage: __(
-					'Paywall probe skipped: no published post matches the current scope.',
-					'simple-x402'
-				),
-			} );
-			return;
-		}
-		if ( ! probeBlock?.url || ! probeBlock?.nonce ) {
-			return;
-		}
-		if ( ! String( mergedSnapshot.selected_facilitator_id ?? '' ).trim() ) {
-			if ( rid !== wallProbeRequestId.current ) {
-				return;
-			}
-			setWallProbe( {
-				infoMessage: __(
-					'Paywall probe skipped: choose a facilitator so the paywall can respond.',
-					'simple-x402'
-				),
-			} );
-			return;
-		}
-
-		setWallProbePending( true );
-		const t0 = performance.now();
-		try {
-			const err = await runPaywallProbe( {
-				url: probeBlock.url,
-				nonce: probeBlock.nonce,
-			} );
-			if ( rid !== wallProbeRequestId.current ) {
-				return;
-			}
-			const durationMs = Math.round( performance.now() - t0 );
-			if ( err ) {
-				setWallProbe( { failureMessage: err } );
-			} else {
-				setWallProbe( { success: true, durationMs } );
-			}
-		} catch ( e ) {
-			if ( rid !== wallProbeRequestId.current ) {
-				return;
-			}
-			const detail = e instanceof Error ? e.message : String( e );
-			setWallProbe( {
-				failureMessage: sprintf(
-					/* translators: %s: Error detail (e.g. network failure). */
-					__( 'Paywall probe failed: %s', 'simple-x402' ),
-					detail
-				),
-			} );
-		} finally {
-			if ( rid === wallProbeRequestId.current ) {
-				setWallProbePending( false );
-			}
-		}
-	};
-
-	const onTestPaywall = () =>
-		run( async () => {
-			const rid = ++wallProbeRequestId.current;
-			setWallProbe( null );
-			setWallProbePending( false );
-			try {
-				const wrap = await fetchPaywallProbeDescriptorFromServer();
-				await runPaywallProbeFollowThrough( wrap.probe, rid, saved );
-			} catch ( e ) {
-				if ( rid !== wallProbeRequestId.current ) {
-					return;
-				}
-				setWallProbe( {
-					failureMessage: e instanceof Error ? e.message : String( e ),
-				} );
-			}
-		} );
-
 	const onSave = () =>
 		run( async () => {
-			const rid = ++wallProbeRequestId.current;
-			setWallProbe( null );
-			setWallProbePending( false );
+			const rid = beginPaywallSaveProbeSession();
 
 			const { values: merged, ajaxData: data } = await save( {
 				paywall_mode: paywallMode,
@@ -385,38 +432,11 @@ function PaywallScopeCard( { saved, save } ) {
 						],
 					} }
 					onChange={ ( edits ) => {
-						wallProbeRequestId.current++;
-						setWallProbe( null );
-						setWallProbePending( false );
+						onPaywallFieldsChange();
 						if ( 'paywallMode' in edits ) setPaywallMode( edits.paywallMode );
 						if ( 'termId' in edits ) setTermId( Number( edits.termId ) );
 					} }
 				/>
-				<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
-					<Button
-						variant="secondary"
-						size="compact"
-						type="button"
-						icon={ boltIcon }
-						iconSize={ 16 }
-						onClick={ onTestPaywall }
-						disabled={ paywallTestDisabled || wallProbePending || saving }
-						accessibleWhenDisabled
-					>
-						{ wallProbePending
-							? __( 'Running check…', 'simple-x402' )
-							: __( 'Test paywall response', 'simple-x402' ) }
-					</Button>
-					{ ( wallProbePending || wallProbe ) && (
-						<DiagnosticProbeLine
-							pending={ wallProbePending }
-							success={ wallProbe?.success === true }
-							durationMs={ wallProbe?.durationMs }
-							failureMessage={ wallProbe?.failureMessage }
-							infoMessage={ wallProbe?.infoMessage }
-						/>
-					) }
-				</HStack>
 			</CardBody>
 			<SaveFooter disabled={ ! isDirty } saving={ saving } error={ error } onSave={ onSave } />
 		</Card>
@@ -554,16 +574,16 @@ const ETHEREUM_ACCOUNT_GUIDE_URL =
 
 const emptySlot = () => ( { wallet_address: '' } );
 
-function FacilitatorCard( { saved, save } ) {
-	const [ facilitator, setFacilitator ] = useState( saved.selected_facilitator_id || '' );
-	const [ slots, setSlots ] = useState( saved.facilitators || {} );
-	const [ probe, setProbe ] = useState( null );
-	const [ testing, setTesting ] = useState( false );
-	// Every new probe bumps this ref; late-arriving fetches check it and
-	// drop their result if the user changed the picker or started a new
-	// probe in the meantime. Without this, switching facilitators mid-probe
-	// could paint a stale "✓ Succeeded" against the wrong option.
-	const probeRequestId = useRef( 0 );
+function FacilitatorCard( {
+	saved,
+	save,
+	facilitator,
+	setFacilitator,
+	slots,
+	setSlots,
+	onFacilitatorFormChange,
+	onFacilitatorSaveComplete,
+} ) {
 	const { saving, error, run } = useSave();
 
 	const slot = '' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
@@ -605,34 +625,6 @@ function FacilitatorCard( { saved, save } ) {
 		facilitator !== savedId ||
 		( '' !== facilitator && ! isShallowEqual( slot, savedSlot ) );
 
-	const runTest = async () => {
-		if ( ! facilitator ) {
-			return;
-		}
-		const requestId = ++probeRequestId.current;
-		setTesting( true );
-		setProbe( null );
-		try {
-			const body = new FormData();
-			body.append( 'action', config.testConnection.action );
-			body.append( 'nonce', config.testConnection.nonce );
-			body.append( 'connector_id', facilitator );
-			const resp = await fetch( config.ajaxUrl, {
-				method: 'POST',
-				credentials: 'same-origin',
-				body,
-			} );
-			const json = await resp.json();
-			if ( requestId !== probeRequestId.current ) return;
-			setProbe( json.success ? json.data : { ok: false, error: json.data?.error || 'request_failed' } );
-		} catch ( e ) {
-			if ( requestId !== probeRequestId.current ) return;
-			setProbe( { ok: false, error: String( e ) } );
-		} finally {
-			if ( requestId === probeRequestId.current ) setTesting( false );
-		}
-	};
-
 	const onWalletChange = ( edits ) => {
 		setSlots( {
 			...slots,
@@ -649,9 +641,7 @@ function FacilitatorCard( { saved, save } ) {
 			const { values: merged } = await save( partial );
 			setFacilitator( merged.selected_facilitator_id || '' );
 			setSlots( merged.facilitators || {} );
-			if ( facilitator ) {
-				await runTest();
-			}
+			await onFacilitatorSaveComplete( merged );
 		} );
 
 	const facilitatorSubtitle =
@@ -682,41 +672,12 @@ function FacilitatorCard( { saved, save } ) {
 						fields: [ 'facilitator' ],
 					} }
 					onChange={ ( edits ) => {
+						onFacilitatorFormChange();
 						setFacilitator( edits.facilitator );
-						setProbe( null );
-						// Invalidate any in-flight probe so its response
-						// doesn't paint onto the newly-picked facilitator.
-						probeRequestId.current++;
 					} }
 				/>
 				{ '' !== facilitator && (
 					<>
-						<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
-							<Button
-								variant="secondary"
-								size="compact"
-								type="button"
-								icon={ boltIcon }
-								iconSize={ 16 }
-								onClick={ runTest }
-								disabled={ testing }
-								accessibleWhenDisabled
-							>
-								{ testing ? __( 'Running check…', 'simple-x402' ) : __( 'Test connection', 'simple-x402' ) }
-							</Button>
-							{ ( testing || probe ) && (
-								<DiagnosticProbeLine
-									pending={ testing && ! probe }
-									success={ probe?.ok === true }
-									durationMs={ probe?.ok ? probe.duration_ms : undefined }
-									failureMessage={
-										probe && ! probe.ok
-											? ( probe.error || __( 'Unreachable', 'simple-x402' ) )
-											: undefined
-									}
-								/>
-							) }
-						</HStack>
 						<div className="simple-x402-page__divider" />
 						{ walletInputVisible ? (
 							<div
@@ -765,6 +726,200 @@ function FacilitatorCard( { saved, save } ) {
 
 function SettingsApp() {
 	const [ saved, setSaved ] = useState( config.values );
+	const [ facilitator, setFacilitator ] = useState( saved.selected_facilitator_id || '' );
+	const [ slots, setSlots ] = useState( saved.facilitators || {} );
+	const [ paywallMode, setPaywallMode ] = useState( saved.paywall_mode );
+	const [ termId, setTermId ] = useState( saved.paywall_category_term_id );
+
+	const adminChecksRequestId = useRef( 0 );
+	const [ facilitatorCheck, setFacilitatorCheck ] = useState( null );
+	const [ paywallCheck, setPaywallCheck ] = useState( null );
+	const [ runChecksPending, setRunChecksPending ] = useState( false );
+
+	const paywallDirty =
+		paywallMode !== saved.paywall_mode ||
+		Number( termId ) !== Number( saved.paywall_category_term_id );
+
+	const savedFacilitatorId = saved.selected_facilitator_id || '';
+	const facilitatorSlot =
+		'' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
+	const savedSlotForPicker =
+		'' === facilitator
+			? emptySlot()
+			: ( ( saved.facilitators || {} )[ facilitator ] ?? emptySlot() );
+	const facilitatorDirty =
+		facilitator !== savedFacilitatorId ||
+		( '' !== facilitator && ! isShallowEqual( facilitatorSlot, savedSlotForPicker ) );
+
+	const invalidateChecksFromFormEdit = () => {
+		adminChecksRequestId.current++;
+		// Cancel any in-flight "Run checks": its `finally` will not clear
+		// `runChecksPending` once the generation no longer matches.
+		setRunChecksPending( false );
+		setFacilitatorCheck( null );
+		setPaywallCheck( null );
+	};
+
+	const beginPaywallSaveProbeSession = () => {
+		const rid = ++adminChecksRequestId.current;
+		setRunChecksPending( false );
+		setPaywallCheck( null );
+		return rid;
+	};
+
+	const runFacilitatorStepForRid = async ( rid, connectorId ) => {
+		setFacilitatorCheck( { pending: true } );
+		try {
+			if ( ! String( connectorId ?? '' ).trim() ) {
+				if ( rid !== adminChecksRequestId.current ) {
+					return;
+				}
+				setFacilitatorCheck( {
+					infoMessage: __(
+						'Facilitator connectivity skipped: no facilitator selected.',
+						'simple-x402'
+					),
+				} );
+				return;
+			}
+			const probe = await runFacilitatorConnectivityAjax( connectorId );
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			if ( probe.ok ) {
+				setFacilitatorCheck( {
+					success: true,
+					durationMs:
+						probe.duration_ms != null ? Math.round( probe.duration_ms ) : undefined,
+				} );
+			} else {
+				setFacilitatorCheck( {
+					failureMessage:
+						probe.error || __( 'Unreachable', 'simple-x402' ),
+				} );
+			}
+		} catch ( e ) {
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			setFacilitatorCheck( {
+				failureMessage: e instanceof Error ? e.message : String( e ),
+			} );
+		}
+	};
+
+	const runPaywallProbeFollowThrough = async ( probeBlock, rid, mergedSnapshot ) => {
+		if ( probeBlock == null ) {
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			setPaywallCheck( {
+				infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
+			} );
+			return;
+		}
+		if ( probeBlock?.reason === 'no_matching_post' ) {
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			setPaywallCheck( {
+				infoMessage: __(
+					'Paywall probe skipped: no published post matches the current scope.',
+					'simple-x402'
+				),
+			} );
+			return;
+		}
+		if ( ! probeBlock?.url || ! probeBlock?.nonce ) {
+			return;
+		}
+		if ( ! String( mergedSnapshot.selected_facilitator_id ?? '' ).trim() ) {
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			setPaywallCheck( {
+				infoMessage: __(
+					'Paywall probe skipped: choose a facilitator so the paywall can respond.',
+					'simple-x402'
+				),
+			} );
+			return;
+		}
+
+		setPaywallCheck( { pending: true } );
+		const t0 = performance.now();
+		try {
+			const err = await runPaywallProbe( {
+				url: probeBlock.url,
+				nonce: probeBlock.nonce,
+			} );
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			const durationMs = Math.round( performance.now() - t0 );
+			if ( err ) {
+				setPaywallCheck( { failureMessage: err } );
+			} else {
+				setPaywallCheck( { success: true, durationMs } );
+			}
+		} catch ( e ) {
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			const detail = e instanceof Error ? e.message : String( e );
+			setPaywallCheck( {
+				failureMessage: sprintf(
+					/* translators: %s: Error detail (e.g. network failure). */
+					__( 'Paywall probe failed: %s', 'simple-x402' ),
+					detail
+				),
+			} );
+		}
+	};
+
+	const onRunChecks = async () => {
+		const rid = ++adminChecksRequestId.current;
+		setFacilitatorCheck( null );
+		setPaywallCheck( null );
+		setRunChecksPending( true );
+		try {
+			await runFacilitatorStepForRid( rid, savedFacilitatorId );
+			if ( rid !== adminChecksRequestId.current ) {
+				return;
+			}
+			setPaywallCheck( { pending: true } );
+			try {
+				const wrap = await fetchPaywallProbeDescriptorFromServer();
+				if ( rid !== adminChecksRequestId.current ) {
+					return;
+				}
+				await runPaywallProbeFollowThrough( wrap.probe, rid, saved );
+			} catch ( e ) {
+				if ( rid !== adminChecksRequestId.current ) {
+					return;
+				}
+				setPaywallCheck( {
+					failureMessage:
+						e instanceof Error ? e.message : String( e ),
+				} );
+			}
+		} finally {
+			if ( rid === adminChecksRequestId.current ) {
+				setRunChecksPending( false );
+			}
+		}
+	};
+
+	const onFacilitatorSaveComplete = async ( merged ) => {
+		const rid = ++adminChecksRequestId.current;
+		setRunChecksPending( false );
+		setFacilitatorCheck( null );
+		const id = merged.selected_facilitator_id || '';
+		if ( ! id ) {
+			return;
+		}
+		await runFacilitatorStepForRid( rid, id );
+	};
 
 	// Shared save engine. Fires one AJAX call, merges the server-canonical
 	// response into `saved` so every card's isDirty check is evaluated against
@@ -807,10 +962,37 @@ function SettingsApp() {
 		<div className="simple-x402-page__content">
 			<div className="simple-x402-page__notices" ref={ noticesRef } />
 			<VStack spacing={ 6 }>
-				<PaywallScopeCard saved={ saved } save={ save } />
+				<RunChecksCard
+					paywallDirty={ paywallDirty }
+					facilitatorDirty={ facilitatorDirty }
+					runChecksPending={ runChecksPending }
+					onRunChecks={ onRunChecks }
+					facilitatorCheck={ facilitatorCheck }
+					paywallCheck={ paywallCheck }
+				/>
+				<PaywallScopeCard
+					saved={ saved }
+					save={ save }
+					paywallMode={ paywallMode }
+					setPaywallMode={ setPaywallMode }
+					termId={ termId }
+					setTermId={ setTermId }
+					onPaywallFieldsChange={ invalidateChecksFromFormEdit }
+					beginPaywallSaveProbeSession={ beginPaywallSaveProbeSession }
+					runPaywallProbeFollowThrough={ runPaywallProbeFollowThrough }
+				/>
 				<AudienceCard saved={ saved } save={ save } />
 				<PricingCard saved={ saved } save={ save } />
-				<FacilitatorCard saved={ saved } save={ save } />
+				<FacilitatorCard
+					saved={ saved }
+					save={ save }
+					facilitator={ facilitator }
+					setFacilitator={ setFacilitator }
+					slots={ slots }
+					setSlots={ setSlots }
+					onFacilitatorFormChange={ invalidateChecksFromFormEdit }
+					onFacilitatorSaveComplete={ onFacilitatorSaveComplete }
+				/>
 			</VStack>
 		</div>
 	);

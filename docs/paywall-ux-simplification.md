@@ -95,8 +95,10 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ### Phase D — Admin “Run checks”
 
-- [ ] Replace two separate probe entry points with one **primary** action that runs facilitator test then paywall probe; keep detailed step output (expandable or two lines under one button).
-- [ ] i18n strings; avoid losing nonce / error surfacing from current flows.
+- [x] Replace two separate probe entry points with one **primary** action that runs facilitator test then paywall probe; keep detailed step output (expandable or two lines under one button).
+- [x] i18n strings; avoid losing nonce / error surfacing from current flows.
+
+**Phase D / Phase B note:** The paywall live probe still expects **HTTP 402 + JSON**; Phase B (HTML 402 bodies) must relax client-side content-type / body checks in `runPaywallProbe()` when that ships.
 
 ---
 
@@ -124,5 +126,6 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 ## Changelog
 
 - **2026-04-26** — Phase A: `PaywallClientProfile` classifier, stable `Accept` / `Sec-Fetch-*` keys on paywall requests, `simple_x402_paywall_client_profile` filter (402 body unchanged).
+- **2026-04-26** — Phase D: unified Settings → Simple x402 **Run checks** (facilitator connectivity, then paywall probe); per-step results in admin UI.
 - **2026-04-25** — Initial doc from agreed product decisions.
 - **2026-04-26** — Matrix and Phase B/C/D revisions: **`everyone`** uses same HTML 402 as document-style bots for exploration/QA; **keep audience + facilitator UI** until wpcom ships; Phase C = staging (default wpcom, hide wallet only when managed `payTo` applies); Phase B notes probe updates after HTML 402.
