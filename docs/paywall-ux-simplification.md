@@ -47,11 +47,11 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ### Phase A — Request plumbing & classifier (no UX change to 402 body yet optional)
 
-- [ ] Extend `Plugin::collect_headers()` / `PaywallController` request array to include **`Accept`**, **`Sec-Fetch-Mode`**, **`Sec-Fetch-Dest`** (canonical header names already normalized).
-- [ ] New small service, e.g. `ClientPresentation` or `PaywallClientProfile`, with pure PHP + unit tests:
+- [x] Extend `Plugin::collect_headers()` / `PaywallController` request array to include **`Accept`**, **`Sec-Fetch-Mode`**, **`Sec-Fetch-Dest`** (canonical header names already normalized).
+- [x] New small service (`PaywallClientProfile`), with pure PHP + unit tests:
   - inputs: `User-Agent`, `Accept`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest` (and optionally `X-Requested-With`);
-  - outputs: `is_bot`, `prefers_json_402`, `prefers_html_402` (or a single enum `JsonBlocked | HtmlBlocked | NotApplicable`).
-- [ ] Thread profile into `RuleResolver` / `DefaultPaywallRule` **or** only into `PaywallController` after rule match—pick the smallest coupling (likely controller + rule context).
+  - outputs (for Phase B): `is_bot`, `document_navigation_intent`, `json_accept_intent`, `xml_http_request` (see class docblock; no `prefers_*` until ambiguous-bot policy lands).
+- [x] Thread profile into `RuleResolver` / `DefaultPaywallRule` **or** only into `PaywallController` after rule match—pick the smallest coupling (likely controller + rule context).
 
 ### Phase B — 402 response negotiation
 
@@ -98,4 +98,5 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ## Changelog
 
+- **2026-04-26** — Phase A: `PaywallClientProfile` classifier, stable `Accept` / `Sec-Fetch-*` keys on paywall requests, `simple_x402_paywall_client_profile` filter (402 body unchanged).
 - **2026-04-25** — Initial doc from agreed product decisions.
