@@ -141,12 +141,13 @@ final class PaywallController {
 			return;
 		}
 
-		$this->client_profile = $this->filtered_client_profile( $request );
-
 		$wallet_hint = (string) ( $request['headers']['X-Wallet-Address'] ?? '' );
 		if ( '' !== $wallet_hint && $this->grants->has_grant( $wallet_hint, $request['path'] ) ) {
 			return;
 		}
+
+		// After grant short-circuit: classifier + filter only on paths that may 402 or verify/settle.
+		$this->client_profile = $this->filtered_client_profile( $request );
 
 		$requirements = $this->builder( $facilitator )->build(
 			$this->settings->resolved_pay_to_address(),

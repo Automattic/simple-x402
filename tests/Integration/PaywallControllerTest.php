@@ -304,6 +304,34 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
 	}
 
+	public function test_client_profile_filter_not_invoked_when_grant_short_circuits(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		( new GrantStore() )->issue( '0xbuyer', '/foo', 60, array() );
+
+		$filter_runs = 0;
+		add_filter(
+			PaywallController::CLIENT_PROFILE_FILTER,
+			static function ( PaywallClientProfile $profile ) use ( &$filter_runs ) {
+				++$filter_runs;
+				return $profile;
+			},
+			10,
+			2
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'X-Wallet-Address' => '0xbuyer' ),
+			)
+		);
+
+		$this->assertSame( 0, $filter_runs, 'Classifier and filter should not run when an existing grant bypasses enforcement.' );
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+	}
+
 	public function test_requirements_use_managed_pool_pay_to_when_filter_returns_address(): void {
 		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		add_filter(
