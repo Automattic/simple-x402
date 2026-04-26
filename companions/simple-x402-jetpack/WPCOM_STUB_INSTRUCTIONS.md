@@ -127,8 +127,8 @@ function simple_x402_settle_stub( WP_REST_Request $r ) {
 
 A WP.com-hosted site with the following installed:
 
-- [`simple-x402`](https://github.com/tellyworth/simple-x402/pull/12) (main paywall plugin)
-- [`simple-x402-jetpack`](https://github.com/tellyworth/simple-x402/pull/14) (the companion plugin that hits your endpoints)
+- [`simple-x402`](https://github.com/Automattic/simple-x402/pull/12) (main paywall plugin)
+- [`simple-x402-jetpack`](https://github.com/Automattic/simple-x402/pull/14) (the companion plugin that hits your endpoints)
 
 Zips are attachable from the PR branches' `composer install --no-dev` output.
 
