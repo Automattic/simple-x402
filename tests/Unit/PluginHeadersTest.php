@@ -31,4 +31,33 @@ final class PluginHeadersTest extends TestCase {
 
 		unset( $_SERVER['HTTP_X_WALLET_ADDRESS'], $_SERVER['HTTP_PAYMENT_SIGNATURE'], $_SERVER['HTTP_USER_AGENT'] );
 	}
+
+	public function test_collect_headers_always_includes_accept_and_sec_fetch_keys(): void {
+		$reflection = new \ReflectionMethod( Plugin::class, 'collect_headers' );
+		$reflection->setAccessible( true );
+		$headers = $reflection->invoke( null );
+
+		$this->assertArrayHasKey( 'Accept', $headers );
+		$this->assertArrayHasKey( 'Sec-Fetch-Mode', $headers );
+		$this->assertArrayHasKey( 'Sec-Fetch-Dest', $headers );
+		$this->assertSame( '', $headers['Accept'] );
+		$this->assertSame( '', $headers['Sec-Fetch-Mode'] );
+		$this->assertSame( '', $headers['Sec-Fetch-Dest'] );
+	}
+
+	public function test_collect_headers_maps_accept_and_sec_fetch_from_server(): void {
+		$_SERVER['HTTP_ACCEPT']         = 'text/html, application/json;q=0.9';
+		$_SERVER['HTTP_SEC_FETCH_MODE'] = 'navigate';
+		$_SERVER['HTTP_SEC_FETCH_DEST'] = 'document';
+
+		$reflection = new \ReflectionMethod( Plugin::class, 'collect_headers' );
+		$reflection->setAccessible( true );
+		$headers = $reflection->invoke( null );
+
+		$this->assertSame( 'text/html, application/json;q=0.9', $headers['Accept'] );
+		$this->assertSame( 'navigate', $headers['Sec-Fetch-Mode'] );
+		$this->assertSame( 'document', $headers['Sec-Fetch-Dest'] );
+
+		unset( $_SERVER['HTTP_ACCEPT'], $_SERVER['HTTP_SEC_FETCH_MODE'], $_SERVER['HTTP_SEC_FETCH_DEST'] );
+	}
 }
