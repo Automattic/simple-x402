@@ -1,4 +1,4 @@
-# Paywall v2 — product spec & implementation checklist
+# Paywall UX simplification — product spec & implementation checklist
 
 WordPress plugin only. Dotcom / Jetpack facilitator / ledger services are out of scope here.
 
