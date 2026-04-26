@@ -38,6 +38,26 @@ final class PaywallController {
 	 */
 	public const CLIENT_PROFILE_FILTER = 'simple_x402_paywall_client_profile';
 
+	/**
+	 * Filters the plain-text excerpt fragment embedded in HTML 402 responses.
+	 *
+	 * @param string $excerpt  Fragment after built-in trimming (may be empty).
+	 * @param int    $post_id  Queried post ID from the paywall request.
+	 * @param array  $request  Full paywall request array.
+	 */
+	public const EXCERPT_TEXT_FILTER = 'simple_x402_paywall_excerpt_text';
+
+	/**
+	 * Filters the full HTML document returned for HTML 402 responses.
+	 *
+	 * @param string $html          Complete HTML document.
+	 * @param array  $request       Full paywall request array.
+	 * @param array  $requirements  Encoded x402 requirements (same as JSON path).
+	 * @param string $price         Human-readable price.
+	 * @param array  $body          Error payload merged into JSON path; same keys available here.
+	 */
+	public const HTML_402_BODY_FILTER = 'simple_x402_paywall_html_402_body';
+
 	/** Nonce action for {@see self::PROBE_HEADER} — settings probe drops admin bypass when valid. */
 	public const PROBE_NONCE_ACTION = 'simple_x402_paywall_probe';
 
@@ -158,19 +178,20 @@ final class PaywallController {
 
 		$signature_header = (string) ( $request['headers']['Payment-Signature'] ?? '' );
 		if ( '' === $signature_header ) {
-			$this->respond_402( $requirements, $rule['price'], array( 'error' => 'payment_required' ) );
+			$this->respond_402( $request, $requirements, $rule['price'], array( 'error' => 'payment_required' ) );
 			return;
 		}
 
 		$payload = X402HeaderCodec::decode( $signature_header );
 		if ( null === $payload ) {
-			$this->respond_402( $requirements, $rule['price'], array( 'error' => 'invalid_signature_header' ) );
+			$this->respond_402( $request, $requirements, $rule['price'], array( 'error' => 'invalid_signature_header' ) );
 			return;
 		}
 
 		$verify = $facilitator->verify( $requirements, $payload );
 		if ( ! $verify['isValid'] ) {
 			$this->respond_402(
+				$request,
 				$requirements,
 				$rule['price'],
 				array(
@@ -184,6 +205,7 @@ final class PaywallController {
 		$settle = $facilitator->settle( $requirements, $payload );
 		if ( ! $settle['success'] ) {
 			$this->respond_402(
+				$request,
 				$requirements,
 				$rule['price'],
 				array(
@@ -223,23 +245,115 @@ final class PaywallController {
 	}
 
 	/**
-	 * Emit a 402 JSON response via the response buffer.
+	 * Emit a 402 response via the response buffer (JSON or HTML body per client profile).
 	 *
-	 * @param string $price Decimal USDC amount (e.g. "0.01") for clients that expect a human-readable price alongside `requirements.maxAmountRequired`.
+	 * @param array  $request      Paywall request (uses post_id for HTML excerpt).
+	 * @param string $price        Decimal USDC amount (e.g. "0.01") for clients that expect a human-readable price alongside `requirements.maxAmountRequired`.
+	 * @param array  $body         Extra keys (e.g. error); must not use keys `requirements` or `price`.
 	 */
-	private function respond_402( array $requirements, string $price, array $body ): void {
+	private function respond_402( array $request, array $requirements, string $price, array $body ): void {
 		nocache_headers();
 		status_header( 402 );
-		$GLOBALS['__sx402_response']['headers']['Content-Type']     = 'application/json';
 		$GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] = X402HeaderCodec::encode( $requirements );
-		// Use array union (+), not array_merge: keys in $body must not overwrite requirements/price.
-		$GLOBALS['__sx402_response']['body']   = wp_json_encode(
-			array(
-				'requirements' => $requirements,
-				'price'        => $price,
-			) + $body
-		);
+
+		if ( $this->should_serve_html_402_body() ) {
+			$GLOBALS['__sx402_response']['headers']['Content-Type'] = 'text/html; charset=UTF-8';
+			$GLOBALS['__sx402_response']['body']                    = $this->build_html_402_body( $request, $requirements, $price, $body );
+		} else {
+			$GLOBALS['__sx402_response']['headers']['Content-Type'] = 'application/json';
+			// Use array union (+), not array_merge: keys in $body must not overwrite requirements/price.
+			$GLOBALS['__sx402_response']['body'] = wp_json_encode(
+				array(
+					'requirements' => $requirements,
+					'price'        => $price,
+				) + $body
+			);
+		}
 		$GLOBALS['__sx402_response']['exited'] = true;
+	}
+
+	/**
+	 * HTML vs JSON for blocked responses (see docs/paywall-ux-simplification.md).
+	 *
+	 * {@see PaywallClientProfile::$document_navigation_intent} (`Sec-Fetch-Mode: navigate` and
+	 * `Sec-Fetch-Dest: document`) selects HTML; all other paywalled clients receive JSON
+	 * (including JSON/`Accept`+json, `X-Requested-With: XMLHttpRequest`, and ambiguous signals).
+	 */
+	private function should_serve_html_402_body(): bool {
+		$p = $this->client_profile;
+		return null !== $p && $p->document_navigation_intent;
+	}
+
+	/**
+	 * @param array<string,mixed> $body
+	 */
+	private function build_html_402_body( array $request, array $requirements, string $price, array $body ): string {
+		$post_id = (int) ( $request['post_id'] ?? 0 );
+		$excerpt = (string) apply_filters(
+			self::EXCERPT_TEXT_FILTER,
+			$this->paywall_excerpt_fragment( $post_id ),
+			$post_id,
+			$request
+		);
+
+		$site = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name', false ) : '';
+		$site = '' !== $site ? '<p class="sx402-site">' . esc_html( $site ) . '</p>' : '';
+
+		$excerpt_block = '' !== $excerpt
+			? '<p class="sx402-excerpt">' . esc_html( $excerpt ) . '</p>'
+			: '';
+
+		$error_code = isset( $body['error'] ) ? (string) $body['error'] : '';
+		$error_line = '' !== $error_code
+			? '<p class="sx402-error"><code>' . esc_html( $error_code ) . '</code></p>'
+			: '';
+
+		$html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'
+			. esc_html__( 'Payment required', 'simple-x402' )
+			. '</title></head><body><main><h1>'
+			. esc_html__( 'Payment required', 'simple-x402' )
+			. '</h1>'
+			. $site
+			. $excerpt_block
+			. '<p class="sx402-price">'
+			. esc_html(
+				/* translators: %s: USDC price (decimal string). */
+				sprintf( __( 'Price: %s USDC', 'simple-x402' ), $price )
+			)
+			. '</p><p class="sx402-hint">'
+			. esc_html__( 'x402 payment instructions are in the PAYMENT-REQUIRED HTTP response header.', 'simple-x402' )
+			. '</p>'
+			. $error_line
+			. '</main></body></html>';
+
+		return (string) apply_filters( self::HTML_402_BODY_FILTER, $html, $request, $requirements, $price, $body );
+	}
+
+	private function paywall_excerpt_fragment( int $post_id ): string {
+		if ( $post_id <= 0 || ! function_exists( 'get_post' ) ) {
+			return '';
+		}
+		$post = get_post( $post_id );
+		if ( ! is_object( $post ) || ! isset( $post->ID ) ) {
+			return '';
+		}
+		$manual = isset( $post->post_excerpt ) ? trim( (string) $post->post_excerpt ) : '';
+		if ( '' !== $manual ) {
+			return $manual;
+		}
+		$content = isset( $post->post_content ) ? (string) $post->post_content : '';
+		if ( '' === $content ) {
+			return '';
+		}
+		$stripped = wp_strip_all_tags( $content );
+		if ( function_exists( 'wp_trim_words' ) ) {
+			return (string) wp_trim_words( $stripped, 55, '…' );
+		}
+		$words = preg_split( '/\s+/u', $stripped, -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! is_array( $words ) || count( $words ) <= 55 ) {
+			return $stripped;
+		}
+		return implode( ' ', array_slice( $words, 0, 55 ) ) . '…';
 	}
 
 	/**

@@ -230,6 +230,64 @@ if ( ! function_exists( 'get_post_status' ) ) {
 		return $GLOBALS['__sx402_posts'][ $post_id ]['post_status'] ?? false;
 	}
 }
+if ( ! defined( 'OBJECT' ) ) {
+	define( 'OBJECT', 'OBJECT' );
+}
+if ( ! function_exists( 'get_post' ) ) {
+	/**
+	 * @param int|\WP_Post|null $post Post ID or object.
+	 */
+	function get_post( $post = null, $output = OBJECT, $filter = 'raw' ) {
+		if ( is_object( $post ) && isset( $post->ID ) ) {
+			return $post;
+		}
+		$post_id = (int) $post;
+		if ( $post_id <= 0 ) {
+			return null;
+		}
+		$row = $GLOBALS['__sx402_posts'][ $post_id ] ?? null;
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$obj = new \stdClass();
+		$obj->ID = $post_id;
+		foreach ( $row as $key => $value ) {
+			$obj->{$key} = $value;
+		}
+		foreach ( array( 'post_title', 'post_excerpt', 'post_content' ) as $key ) {
+			if ( ! isset( $obj->{$key} ) ) {
+				$obj->{$key} = '';
+			}
+		}
+		return $obj;
+	}
+}
+if ( ! function_exists( 'get_bloginfo' ) ) {
+	function get_bloginfo( string $show = '', bool $filter = true ): string {
+		return (string) ( $GLOBALS['__sx402_bloginfo'][ $show ] ?? '' );
+	}
+}
+if ( ! function_exists( 'wp_strip_all_tags' ) ) {
+	function wp_strip_all_tags( string $string, bool $remove_breaks = false ): string {
+		return trim( strip_tags( $string ) );
+	}
+}
+if ( ! function_exists( 'wp_trim_words' ) ) {
+	function wp_trim_words( string $text, int $num_words = 55, ?string $more = null ): string {
+		if ( '' === $text ) {
+			return '';
+		}
+		$suffix = null !== $more ? $more : '…';
+		if ( preg_match_all( '/\S+/u', $text, $matches ) ) {
+			$words = $matches[0];
+			if ( count( $words ) <= $num_words ) {
+				return $text;
+			}
+			return implode( ' ', array_slice( $words, 0, $num_words ) ) . $suffix;
+		}
+		return $text;
+	}
+}
 if ( ! function_exists( 'get_transient' ) ) {
 	function get_transient( string $key ) {
 		$entry = $GLOBALS['__sx402_transients'][ $key ] ?? null;
@@ -599,6 +657,7 @@ if ( ! class_exists( 'WP_Term' ) ) {
 }
 $GLOBALS['__sx402_terms']           = array();
 $GLOBALS['__sx402_posts']           = array();
+$GLOBALS['__sx402_bloginfo']       = array();
 $GLOBALS['__sx402_existing_terms']  = array();
 $GLOBALS['__sx402_inserted_terms']  = array();
 $GLOBALS['__sx402_settings_errors'] = array();
@@ -644,8 +703,9 @@ if ( ! class_exists( 'Automattic\\Jetpack\\Connection\\Client' ) ) {
 }
 
 // Reset global state between tests.
-$GLOBALS['__sx402_options']    = array();
+$GLOBALS['__sx402_options']     = array();
 $GLOBALS['__sx402_transients'] = array();
+$GLOBALS['__sx402_bloginfo']   = array();
 $GLOBALS['__sx402_filters']    = array();
 $GLOBALS['__sx402_actions']    = array();
 $GLOBALS['__sx402_http']       = null;
