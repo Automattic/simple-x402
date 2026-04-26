@@ -87,10 +87,27 @@ const paymentPayload = {
 
 const header = Buffer.from( JSON.stringify( paymentPayload ) ).toString( 'base64' );
 
+console.log( '\n    signed authorization:', {
+	from: authorization.from,
+	to: authorization.to,
+	value: authorization.value,
+	validBefore: authorization.validBefore,
+	nonce: authorization.nonce.slice( 0, 18 ) + '…',
+} );
+console.log( '    retry header: Payment-Signature (base64 length ' + header.length + ')' );
+
 const second = await fetch( url, {
 	headers: { 'Payment-Signature': header },
 } );
 console.log( `\n[2] RETRY → ${ second.status }` );
 const body = await second.text();
 console.log( body.length > 1200 ? body.slice( 0, 1200 ) + '\n...[truncated]' : body );
+try {
+	const j = JSON.parse( body );
+	if ( j.error ) {
+		console.log( '    parsed error:', j.error, j.reason != null ? '(' + j.reason + ')' : '' );
+	}
+} catch {
+	// not JSON
+}
 process.exit( second.ok ? 0 : 1 );

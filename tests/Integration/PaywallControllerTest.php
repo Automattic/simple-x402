@@ -356,7 +356,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array( 'Payment-Signature' => $payload ),
 			)
 		);
 
@@ -397,7 +397,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/paid-post',
 				'method'  => 'GET',
 				'post_id' => 42,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array( 'Payment-Signature' => $payload ),
 			)
 		);
 
@@ -431,7 +431,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array( 'Payment-Signature' => $payload ),
 			)
 		);
 
@@ -451,7 +451,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => 'not-valid-base64!!!' ),
+				'headers' => array( 'Payment-Signature' => 'not-valid-base64!!!' ),
 			)
 		);
 
@@ -489,7 +489,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array( 'Payment-Signature' => $payload ),
 			)
 		);
 
@@ -550,7 +550,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/premium',
 				'method'  => 'GET',
 				'post_id' => 1,
-				'headers' => array( 'PAYMENT-SIGNATURE' => $payload ),
+				'headers' => array( 'Payment-Signature' => $payload ),
 			)
 		);
 

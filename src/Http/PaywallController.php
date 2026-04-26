@@ -155,7 +155,7 @@ final class PaywallController {
 			$rule['description']
 		);
 
-		$signature_header = (string) ( $request['headers']['PAYMENT-SIGNATURE'] ?? '' );
+		$signature_header = (string) ( $request['headers']['Payment-Signature'] ?? '' );
 		if ( '' === $signature_header ) {
 			$this->respond_402( $requirements, $rule['price'], array( 'error' => 'payment_required' ) );
 			return;
