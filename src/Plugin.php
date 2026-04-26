@@ -209,6 +209,10 @@ final class Plugin {
 	/**
 	 * Collect inbound HTTP headers from $_SERVER.
 	 *
+	 * Always includes `Accept`, `Sec-Fetch-Mode`, and `Sec-Fetch-Dest` (empty
+	 * string when the client did not send them) so paywall code can read a
+	 * stable shape without `isset` guards.
+	 *
 	 * @return array<string,string>
 	 */
 	private static function collect_headers(): array {
@@ -224,6 +228,13 @@ final class Plugin {
 				$out[ $name ] = sanitize_text_field( (string) wp_unslash( $value ) );
 			}
 		}
-		return $out;
+		return array_merge(
+			array(
+				'Accept'         => '',
+				'Sec-Fetch-Mode' => '',
+				'Sec-Fetch-Dest' => '',
+			),
+			$out
+		);
 	}
 }

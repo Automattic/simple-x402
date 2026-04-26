@@ -10,6 +10,7 @@ use SimpleX402\Http\PaywallController;
 use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Services\FacilitatorProfile;
 use SimpleX402\Services\GrantStore;
+use SimpleX402\Services\PaywallClientProfile;
 use SimpleX402\Services\RuleResolver;
 use SimpleX402\Services\X402HeaderCodec;
 use SimpleX402\Settings\SettingsRepository;
@@ -110,6 +111,43 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertTrue( $seen['singular'] );
 		$this->assertSame( 1, $seen['post_id'] );
 		$this->assertFalse( $seen['paywall_probe'] );
+	}
+
+	public function test_client_profile_filter_runs_with_classified_headers_on_paywall_path(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$captured = null;
+		add_filter(
+			PaywallController::CLIENT_PROFILE_FILTER,
+			function ( PaywallClientProfile $profile, array $request ) use ( &$captured ) {
+				$captured = $profile;
+				$this->assertArrayHasKey( 'Accept', $request['headers'] );
+				$this->assertArrayHasKey( 'Sec-Fetch-Mode', $request['headers'] );
+				$this->assertArrayHasKey( 'Sec-Fetch-Dest', $request['headers'] );
+				return $profile;
+			},
+			10,
+			2
+		);
+
+		$googlebot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(
+					'User-Agent'     => $googlebot,
+					'Accept'         => 'application/json',
+					'Sec-Fetch-Mode' => 'navigate',
+					'Sec-Fetch-Dest' => 'document',
+				),
+			)
+		);
+
+		$this->assertInstanceOf( PaywallClientProfile::class, $captured );
+		$this->assertTrue( $captured->is_bot );
+		$this->assertTrue( $captured->document_navigation_intent );
+		$this->assertTrue( $captured->json_accept_intent );
 	}
 
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {
@@ -264,6 +302,34 @@ final class PaywallControllerTest extends TestCase {
 
 		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
 		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+	}
+
+	public function test_client_profile_filter_not_invoked_when_grant_short_circuits(): void {
+		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		( new GrantStore() )->issue( '0xbuyer', '/foo', 60, array() );
+
+		$filter_runs = 0;
+		add_filter(
+			PaywallController::CLIENT_PROFILE_FILTER,
+			static function ( PaywallClientProfile $profile ) use ( &$filter_runs ) {
+				++$filter_runs;
+				return $profile;
+			},
+			10,
+			2
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'X-Wallet-Address' => '0xbuyer' ),
+			)
+		);
+
+		$this->assertSame( 0, $filter_runs, 'Classifier and filter should not run when an existing grant bypasses enforcement.' );
+		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
 	}
 
 	public function test_requirements_use_managed_pool_pay_to_when_filter_returns_address(): void {

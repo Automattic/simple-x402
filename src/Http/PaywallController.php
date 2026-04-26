@@ -12,6 +12,7 @@ namespace SimpleX402\Http;
 use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Services\GrantStore;
+use SimpleX402\Services\PaywallClientProfile;
 use SimpleX402\Services\PaymentRequirementsBuilder;
 use SimpleX402\Services\PaymentSettlementNotifier;
 use SimpleX402\Services\RuleResolver;
@@ -30,6 +31,13 @@ final class PaywallController {
 
 	public const BYPASS_HOOK = 'simple_x402_bypass_paywall';
 
+	/**
+	 * Fires after the paywall builds a {@see PaywallClientProfile} for this request
+	 * (non-bypassed path with a resolved facilitator). Filter must return a
+	 * PaywallClientProfile instance; other return types are ignored.
+	 */
+	public const CLIENT_PROFILE_FILTER = 'simple_x402_paywall_client_profile';
+
 	/** Nonce action for {@see self::PROBE_HEADER} — settings probe drops admin bypass when valid. */
 	public const PROBE_NONCE_ACTION = 'simple_x402_paywall_probe';
 
@@ -45,6 +53,9 @@ final class PaywallController {
 	private ?PaymentRequirementsBuilder $builder = null;
 
 	private ?PaymentSettlementNotifier $settlement_notifier;
+
+	/** Set on the paywall enforcement path for Phase B; unused in Phase A beyond {@see self::CLIENT_PROFILE_FILTER}. */
+	private ?PaywallClientProfile $client_profile = null;
 
 	public function __construct(
 		private readonly RuleResolver $rules,
@@ -86,11 +97,19 @@ final class PaywallController {
 	}
 
 	/**
-	 * @param array{path:string,method:string,post_id:int,singular?:bool,headers:array<string,string>} $request Request details.
+	 * @param array{
+	 *   path:string,
+	 *   method:string,
+	 *   post_id:int,
+	 *   singular?:bool,
+	 *   headers:array<string,string>
+	 * } $request Request details. `headers` always includes `Accept`, `Sec-Fetch-Mode`, and
+	 *              `Sec-Fetch-Dest` when built by {@see \SimpleX402\Plugin::boot()} (empty string if absent).
 	 */
 	public function handle( array $request ): void {
-		$paywall_probe = $this->valid_paywall_probe_header( $request );
-		$rule          = $this->rules->resolve(
+		$this->client_profile = null;
+		$paywall_probe        = $this->valid_paywall_probe_header( $request );
+		$rule                 = $this->rules->resolve(
 			array(
 				'path'          => $request['path'],
 				'method'        => $request['method'],
@@ -126,6 +145,9 @@ final class PaywallController {
 		if ( '' !== $wallet_hint && $this->grants->has_grant( $wallet_hint, $request['path'] ) ) {
 			return;
 		}
+
+		// After grant short-circuit: classifier + filter only on paths that may 402 or verify/settle.
+		$this->client_profile = $this->filtered_client_profile( $request );
 
 		$requirements = $this->builder( $facilitator )->build(
 			$this->settings->resolved_pay_to_address(),
@@ -240,5 +262,21 @@ final class PaywallController {
 			return false;
 		}
 		return (bool) wp_verify_nonce( $token, self::PROBE_NONCE_ACTION );
+	}
+
+	/**
+	 * @param array{headers:array<string,string>} $request
+	 */
+	private function filtered_client_profile( array $request ): PaywallClientProfile {
+		$h        = $request['headers'];
+		$base     = PaywallClientProfile::classify(
+			(string) ( $h['User-Agent'] ?? '' ),
+			(string) ( $h['Accept'] ?? '' ),
+			(string) ( $h['Sec-Fetch-Mode'] ?? '' ),
+			(string) ( $h['Sec-Fetch-Dest'] ?? '' ),
+			array_key_exists( 'X-Requested-With', $h ) ? (string) $h['X-Requested-With'] : null,
+		);
+		$filtered = apply_filters( self::CLIENT_PROFILE_FILTER, $base, $request );
+		return $filtered instanceof PaywallClientProfile ? $filtered : $base;
 	}
 }
