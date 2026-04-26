@@ -5,22 +5,39 @@ WordPress plugin only. Dotcom / Jetpack facilitator / ledger services are out of
 ## Goals
 
 1. **402 with negotiated body:** JSON (current shape) or minimal **HTML** (excerpt + payment notice), driven by client signals—not one body for everyone.
-2. **Smarter client classification:** Combine **CrawlerDetect** with **`Accept`**, **`Sec-Fetch-Mode`**, **`Sec-Fetch-Dest`** to separate “JSON / API-style” clients from “HTML document” clients (especially among bots).
-3. **Implicit audience:** **Humans always get full content**; only **bots / API-style clients** hit the paywall. Remove or hide the **audience** setting (no human payment path today).
-4. **Single facilitator path:** Product UX assumes **Jetpack + pooled managed** `payTo`—no facilitator picker for normal installs (dev escape hatches may remain via env / filters).
+2. **Smarter client classification:** Combine **CrawlerDetect** with **`Accept`**, **`Sec-Fetch-Mode`**, **`Sec-Fetch-Dest`** to separate “JSON / API-style” clients from “HTML document” clients (among both bots and, when allowed, humans).
+3. **Audience stays configurable:** Keep the **audience** setting (`bots` vs `everyone`). **`everyone`** supports manual QA in a real browser and lets us explore a **human-facing unpaid experience** (same HTML payment-required template as document-style bots)—not a commitment to a full human checkout yet.
+4. **Facilitator UI stays for now:** Keep the facilitator picker (and testnet path) until a **functioning wpcom facilitator** is deployed; product UX should still **bias toward wpcom** (default selection, copy) and **hide the wallet field when it is not needed** (see Phase C).
 5. **Admin probes:** One primary control (e.g. **“Run checks”**) that runs **facilitator test** and **paywall probe** in a single flow (order: facilitator first, then paywall—or document chosen order).
 
 ---
 
 ## Behaviour matrix (authoritative)
 
+**Status code:** Always **402** when the paywall blocks (including HTML path).
+
+**Body choice (JSON vs HTML)** when blocked depends on **client presentation** (classification § below), not on bot vs human: **document-style** → **HTML 402** excerpt template; **JSON / API-style** → **JSON 402** (current shape + `PAYMENT-REQUIRED` header).
+
+### When `paywall_audience = bots` (default)
+
 | Client | Paywall? | On block |
 |--------|-----------|----------|
-| **Non-bot** (not classified as a bot) | **No** — always **full content** | — |
-| **Bot + HTML document signals** | Yes | **402** + `Content-Type: text/html` — **excerpt-only** template + short text that payment is required (amount + pointer to x402 / `PAYMENT-REQUIRED` headers). |
-| **Bot + JSON / API signals** (see classification) | Yes | **402** + `Content-Type: application/json` — preserve / evolve current JSON + `PAYMENT-REQUIRED` header behaviour. |
+| **Non-bot** | **No** — **full content** | — |
+| **Bot + HTML document signals** | Yes | **402** + `text/html` — excerpt template + payment-required copy (+ x402 / header pointer). |
+| **Bot + JSON / API signals** | Yes | **402** + `application/json` — current JSON body + `PAYMENT-REQUIRED`. |
 
-**Status code:** Always **402** when the paywall blocks (including HTML path).
+### When `paywall_audience = everyone`
+
+Any **in-scope, unpaid** client can be paywalled (QA + exploration of a future human flow).
+
+| Client | Paywall? | On block |
+|--------|-----------|----------|
+| **Non-bot + HTML document signals** (e.g. normal tab) | Yes | **Same HTML 402** path as HTML-capable bots (excerpt template + payment-required copy). |
+| **Non-bot + JSON / API signals** | Yes | **402** + `application/json` — same as bot JSON path. |
+| **Bot + HTML document signals** | Yes | **402** + `text/html` — as above. |
+| **Bot + JSON / API signals** | Yes | **402** + `application/json` — as above. |
+
+**Production note:** `everyone` may have **SEO / indexing** implications (search crawlers can receive 402 + excerpt). Treat as an **explicit** mode; default remains **`bots`** until a product decision says otherwise.
 
 ---
 
@@ -30,16 +47,16 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 1. **`Sec-Fetch-Mode` / `Sec-Fetch-Dest`** (when present): **`navigate` + `document`** → treat as **HTML document** intent (typical browser navigation).
 2. **`Accept`:** contains **`application/json`** or a **`+json`** subtype → **JSON** intent for the response body when blocking.
-3. **`User-Agent`:** **CrawlerDetect** → **bot** vs non-bot.
+3. **`User-Agent`:** **CrawlerDetect** → **bot** vs non-bot (drives **whether** the paywall applies when `audience = bots`; still used for analytics / future policy).
 
-**Heuristic defaults:**
+**Heuristic defaults (body shape, among clients that are actually paywalled):**
 
-- **Non-bot** → never paywalled (full content).
-- **Bot + HTML document intent** → if paywalled, **HTML 402** excerpt path.
-- **Bot + JSON intent** (or API-style `Accept` without document navigation) → if paywalled, **JSON 402** path.
-- **Bot with ambiguous signals:** prefer **JSON** if `Accept` strongly suggests API; else **HTML** if document-like fetch metadata exists; else define a safe default (document in issue/PR—suggest **JSON** to match current ecosystem expectations for unknown bots).
+- **HTML document intent** → **HTML 402** excerpt path.
+- **JSON intent** (or API-style `Accept` without document navigation) → **JSON 402** path.
+- **Ambiguous (bot):** prefer **JSON** if `Accept` strongly suggests API; else **HTML** if document-like fetch metadata exists; else default **JSON** for unknown bots unless PR specifies otherwise.
+- **Ambiguous (non-bot, `everyone` only):** same body rules as above—browser-like → HTML; API-like → JSON.
 
-**Edge case (explicit):** Non-crawler **API clients** (automation, `curl`, scripts) with `Accept: application/json` may need to be paywalled with **JSON 402** even when CrawlerDetect is false—product call: either extend “paywall applies” beyond strict bot UA, or document that only crawler UA + JSON `Accept` gets JSON path. **Recommendation:** allow paywall for **JSON-first non-navigate** requests on in-scope URLs even without bot UA, **or** add a separate “API paywall” flag later; v1 can start **strict bot-only** paywall application and still use `Accept` only **among bots** to choose JSON vs HTML body.
+**Edge case:** With **`everyone`**, non-crawler **API clients** (`curl`, scripts) with `Accept: application/json` can receive **JSON 402** without being CrawlerDetect bots. With **`bots` only**, they remain **full content** unless you later add a separate “API paywall” flag.
 
 ---
 
@@ -57,16 +74,24 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 - [ ] Split `PaywallController::respond_402` (or parallel paths) to emit:
   - same **402** + **`PAYMENT-REQUIRED`** header;
-  - **JSON** body (existing shape) vs **HTML** minimal template.
+  - **JSON** body (existing shape) vs **HTML** minimal template, chosen from **client presentation** + **`paywall_audience`** (see matrix: with **`everyone`**, unpaid **non-bot document** clients get the **same HTML 402** as HTML-style bots).
 - [ ] HTML template: post **excerpt** (from `$post_id` / queried post), site title optional, payment line with **configured price** + note to inspect x402 headers.
 - [ ] Filters, e.g. `simple_x402_paywall_html_402_body` / `simple_x402_paywall_excerpt_text` (exact names TBD in PR) for themes.
-- [ ] Integration tests: header `Accept` + bot UA → JSON body; Sec-Fetch navigate + bot UA → HTML contains excerpt substring.
+- [ ] Integration tests: e.g. `Accept` + bot UA → JSON body; `Sec-Fetch-Mode` navigate + document + bot UA → HTML contains excerpt; with **`everyone`**, equivalent **non-bot document** case → **HTML 402** (not raw JSON).
+- [ ] **Admin paywall probe (Phase D):** after Phase B, the live probe may see **HTML** `Content-Type` when testing in a browser-style context—update probe success criteria (don’t assume JSON-only 402 forever).
 
-### Phase C — Audience & facilitator simplification
+### Phase C — Audience & facilitator (staging; keep controls for testing)
 
-- [ ] **Audience:** remove from admin UI; stop reading stored `paywall_audience` for product behaviour **or** hard-default to “bots only” and migrate old `everyone` rows; optional `simple_x402_paywall_audience` filter for rare overrides.
-- [ ] **Facilitator:** single code path—constant connector id (`wpcom_x402`), hide facilitator card / wallet for managed pool; keep **dev** path (env, `SIMPLE_X402_*`, or mu-plugin) if needed for local testing without Jetpack.
-- [ ] Update **README**, **PaywallIndicator** copy, and any **REST/settings** payloads.
+**Until the wpcom facilitator is live in production**, keep **audience** and **facilitator** controls so we can test on **testnet** and flip **`everyone`** for human QA.
+
+- [ ] **Audience:** keep setting in admin and in stored options; **no removal** in this phase. Optional: `simple_x402_paywall_audience` filter later if needed.
+- [ ] **Facilitator:** keep picker and **`simple_x402_test`** (x402.org / Base Sepolia) for ongoing development.
+  - **Default toward wpcom:** align UX with existing autopick where possible—**prefer `wpcom_x402`** when the companion registers it and Jetpack reports connected; otherwise fall back to test connector (already largely true—verify settings bootstrap + first-run story).
+  - **Wallet field:** hide when **`simple_x402_managed_pool_pay_to`** returns a non-empty `payTo` for the selected connector (already reflected in `managedWalletFacilitators`). If wpcom is selected **without** a managed pool address yet, the wallet may still be required for `payTo`—do **not** hide solely on connector id until `payTo` is guaranteed (e.g. dev sets `SIMPLE_X402_WPCOM_POOL_ADDRESS` or Dotcom supplies the pool).
+  - Copy / help text: clarify **testnet vs WordPress.com** paths without implying the picker will disappear before wpcom ships.
+- [ ] Update **README**, **PaywallIndicator** copy, and settings payloads as needed for the above (no “single hard-coded facilitator” messaging until wpcom is ready).
+
+**Deferred:** Removing facilitator UI and hard-coding a single connector—revisit after wpcom facilitator deployment.
 
 ### Phase D — Admin “Run checks”
 
@@ -90,12 +115,13 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ## Open items (resolve in first implementing PR)
 
-1. **Strict bot-only vs JSON `Accept` for non-crawlers** — pick v1 rule (see edge case above).
-2. **Ambiguous bot** default (JSON vs HTML) when both/neither signals present.
-3. **HTML template** location: inline string in PHP vs small view file under `templates/` vs `wp_kses_post` + block template hook.
+1. **Ambiguous client** default (JSON vs HTML) when both/neither signals present—separate defaults for bot vs non-bot (`everyone`) if needed.
+2. **HTML template** location: inline string in PHP vs small view file under `templates/` vs `wp_kses_post` + block template hook.
+3. **Human grant / payment path** (cookies, wallet, Woo, etc.)—out of scope for B except messaging in the HTML template.
 
 ---
 
 ## Changelog
 
 - **2026-04-25** — Initial doc from agreed product decisions.
+- **2026-04-26** — Matrix and Phase B/C/D revisions: **`everyone`** uses same HTML 402 as document-style bots for exploration/QA; **keep audience + facilitator UI** until wpcom ships; Phase C = staging (default wpcom, hide wallet only when managed `payTo` applies); Phase B notes probe updates after HTML 402.
