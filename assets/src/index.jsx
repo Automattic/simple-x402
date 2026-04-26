@@ -277,6 +277,7 @@ const PAYWALL_MODE_FIELDS = [
 /**
  * @param {object} props
  * @param {boolean} props.paywallDirty
+ * @param {boolean} props.facilitatorDirty
  * @param {boolean} props.runChecksPending
  * @param {() => void} props.onRunChecks
  * @param {object|null} props.facilitatorCheck
@@ -284,6 +285,7 @@ const PAYWALL_MODE_FIELDS = [
  */
 function RunChecksCard( {
 	paywallDirty,
+	facilitatorDirty,
 	runChecksPending,
 	onRunChecks,
 	facilitatorCheck,
@@ -315,7 +317,9 @@ function RunChecksCard( {
 							icon={ boltIcon }
 							iconSize={ 16 }
 							onClick={ onRunChecks }
-							disabled={ paywallDirty || runChecksPending }
+							disabled={
+								paywallDirty || facilitatorDirty || runChecksPending
+							}
 							accessibleWhenDisabled
 							aria-busy={ runChecksPending }
 						>
@@ -324,6 +328,14 @@ function RunChecksCard( {
 								: __( 'Run checks', 'simple-x402' ) }
 						</Button>
 					</HStack>
+					{ facilitatorDirty && (
+						<Text size={ 13 } variant="muted">
+							{ __(
+								'Save your facilitator settings before running checks.',
+								'simple-x402'
+							) }
+						</Text>
+					) }
 					{ paywallDirty && (
 						<Text size={ 13 } variant="muted">
 							{ __(
@@ -728,6 +740,17 @@ function SettingsApp() {
 		paywallMode !== saved.paywall_mode ||
 		Number( termId ) !== Number( saved.paywall_category_term_id );
 
+	const savedFacilitatorId = saved.selected_facilitator_id || '';
+	const facilitatorSlot =
+		'' === facilitator ? emptySlot() : ( slots[ facilitator ] ?? emptySlot() );
+	const savedSlotForPicker =
+		'' === facilitator
+			? emptySlot()
+			: ( ( saved.facilitators || {} )[ facilitator ] ?? emptySlot() );
+	const facilitatorDirty =
+		facilitator !== savedFacilitatorId ||
+		( '' !== facilitator && ! isShallowEqual( facilitatorSlot, savedSlotForPicker ) );
+
 	const invalidateChecksFromFormEdit = () => {
 		adminChecksRequestId.current++;
 		// Cancel any in-flight "Run checks": its `finally` will not clear
@@ -860,7 +883,7 @@ function SettingsApp() {
 		setPaywallCheck( null );
 		setRunChecksPending( true );
 		try {
-			await runFacilitatorStepForRid( rid, facilitator );
+			await runFacilitatorStepForRid( rid, savedFacilitatorId );
 			if ( rid !== adminChecksRequestId.current ) {
 				return;
 			}
@@ -941,6 +964,7 @@ function SettingsApp() {
 			<VStack spacing={ 6 }>
 				<RunChecksCard
 					paywallDirty={ paywallDirty }
+					facilitatorDirty={ facilitatorDirty }
 					runChecksPending={ runChecksPending }
 					onRunChecks={ onRunChecks }
 					facilitatorCheck={ facilitatorCheck }
