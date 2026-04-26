@@ -730,12 +730,16 @@ function SettingsApp() {
 
 	const invalidateChecksFromFormEdit = () => {
 		adminChecksRequestId.current++;
+		// Cancel any in-flight "Run checks": its `finally` will not clear
+		// `runChecksPending` once the generation no longer matches.
+		setRunChecksPending( false );
 		setFacilitatorCheck( null );
 		setPaywallCheck( null );
 	};
 
 	const beginPaywallSaveProbeSession = () => {
 		const rid = ++adminChecksRequestId.current;
+		setRunChecksPending( false );
 		setPaywallCheck( null );
 		return rid;
 	};
@@ -885,6 +889,7 @@ function SettingsApp() {
 
 	const onFacilitatorSaveComplete = async ( merged ) => {
 		const rid = ++adminChecksRequestId.current;
+		setRunChecksPending( false );
 		setFacilitatorCheck( null );
 		const id = merged.selected_facilitator_id || '';
 		if ( ! id ) {
