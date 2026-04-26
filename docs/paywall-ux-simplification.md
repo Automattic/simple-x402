@@ -117,7 +117,7 @@ Apply in order; first strong match wins where noted; otherwise combine bot flag 
 
 ## Open items (resolve in first implementing PR)
 
-1. **Ambiguous client** default (JSON vs HTML) when both/neither signals present—separate defaults for bot vs non-bot (`everyone`) if needed.
+1. ~~**Ambiguous client** default (JSON vs HTML) when both/neither signals present~~ **Phase B:** HTML 402 **only** when `document_navigation_intent` is true (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`). If that is false, body is **JSON** (including when `json_accept_intent` or `xml_http_request` is true, and when all three are false). When document intent is true, HTML wins even if `Accept` lists JSON.
 2. **HTML template** location: inline string in PHP vs small view file under `templates/` vs `wp_kses_post` + block template hook.
 3. **Human grant / payment path** (cookies, wallet, Woo, etc.)—out of scope for B except messaging in the HTML template.
 
