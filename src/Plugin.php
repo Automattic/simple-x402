@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402;
 
+use SimpleX402\Admin\GravatarLookupAjax;
 use SimpleX402\Admin\PaywallIndicator;
 use SimpleX402\Admin\PaywallProbeAjax;
 use SimpleX402\Admin\SettingsAjax;
@@ -108,6 +109,7 @@ final class Plugin {
 			( new TestConnectionAjax( $resolver ) )->register();
 			( new SettingsAjax( $settings ) )->register();
 			( new PaywallProbeAjax( $settings ) )->register();
+			( new GravatarLookupAjax() )->register();
 		}
 
 		add_action(

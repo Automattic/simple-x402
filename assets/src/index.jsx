@@ -143,6 +143,140 @@ async function runFacilitatorConnectivityAjax( connectorId ) {
 }
 
 /**
+ * Ask the Gravatar Wallet service who's logged in (if anyone).
+ * Hits the prototype directly from the browser with credentials so the
+ * user's session cookie travels along. Returns null on 401 / network error.
+ *
+ * @param {string} endpoint Base URL of the Gravatar Wallet service.
+ * @returns {Promise<null | { walletAddress: string, displayName: string, avatarUrl: string, email: string }>}
+ */
+async function fetchGravatarSession( endpoint ) {
+	try {
+		const resp = await fetch( endpoint.replace( /\/$/, '' ) + '/me', {
+			credentials: 'include',
+			headers: { Accept: 'application/json' },
+		} );
+		if ( ! resp.ok ) return null;
+		const data = await resp.json();
+		return data?.walletAddress ? data : null;
+	} catch ( _ ) {
+		return null;
+	}
+}
+
+/**
+ * Auto-detected "Connected to Gravatar" UI. If the admin's browser already
+ * has a Gravatar session, show their avatar + name + "Use this wallet".
+ * If not, show "Sign in to Gravatar" which opens the Gravatar Wallet
+ * service in a new tab; on focus return we re-check the session.
+ *
+ * @param {object} props
+ * @param {(addr: string) => void} props.onAddress Called when the admin clicks Use this wallet.
+ */
+function GravatarConnect( { onAddress } ) {
+	const endpoint = config.gravatarLookup?.endpoint || '';
+	const [ state, setState ] = useState( { kind: 'detecting' } );
+	const [ filled, setFilled ] = useState( false );
+
+	const refresh = async () => {
+		setState( { kind: 'detecting' } );
+		const me = await fetchGravatarSession( endpoint );
+		setState( me ? { kind: 'connected', user: me } : { kind: 'anon' } );
+	};
+
+	useEffect( () => {
+		if ( ! endpoint ) {
+			setState( { kind: 'disabled' } );
+			return;
+		}
+		refresh();
+		// If the admin signed in via the popup tab, re-check on focus return.
+		const onFocus = () => refresh();
+		window.addEventListener( 'focus', onFocus );
+		return () => window.removeEventListener( 'focus', onFocus );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ endpoint ] );
+
+	if ( state.kind === 'disabled' ) return null;
+
+	if ( state.kind === 'detecting' ) {
+		return (
+			<div className="simple-x402-page__gravatar-lookup">
+				<Text size={ 13 } variant="muted">
+					{ __( 'Checking Gravatar session…', 'simple-x402' ) }
+				</Text>
+			</div>
+		);
+	}
+
+	if ( state.kind === 'anon' ) {
+		const loginUrl = endpoint.replace( /\/$/, '' ) + '/login?next=/login%3Fdone=1';
+		return (
+			<div className="simple-x402-page__gravatar-lookup">
+				<HStack spacing={ 2 } alignment="center">
+					<Button
+						variant="secondary"
+						type="button"
+						href={ loginUrl }
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{ __( 'Sign in to Gravatar', 'simple-x402' ) }
+					</Button>
+					<Text size={ 13 } variant="muted">
+						{ __(
+							'Use the wallet attached to your Gravatar profile. Come back to this tab after signing in.',
+							'simple-x402'
+						) }
+					</Text>
+				</HStack>
+			</div>
+		);
+	}
+
+	// Connected
+	const { user } = state;
+	const short = user.walletAddress.slice( 0, 6 ) + '…' + user.walletAddress.slice( -4 );
+	const useWallet = () => {
+		onAddress( user.walletAddress );
+		setFilled( true );
+	};
+
+	return (
+		<div className="simple-x402-page__gravatar-lookup">
+			<HStack spacing={ 3 } alignment="center">
+				{ user.avatarUrl && (
+					<img
+						src={ user.avatarUrl }
+						alt=""
+						width={ 36 }
+						height={ 36 }
+						style={ { borderRadius: '50%' } }
+					/>
+				) }
+				<VStack spacing={ 0 } style={ { flex: 1 } }>
+					<Text size={ 13 } weight={ 600 }>
+						{ sprintf(
+							/* translators: %s: Gravatar display name. */
+							__( 'Connected as %s', 'simple-x402' ),
+							user.displayName || user.email
+						) }
+					</Text>
+					<Text size={ 12 } variant="muted">
+						{ short }
+					</Text>
+				</VStack>
+				<Button variant="secondary" type="button" onClick={ useWallet } disabled={ filled }>
+					{ filled
+						? __( '✓ Filled', 'simple-x402' )
+						: __( 'Use this wallet', 'simple-x402' ) }
+				</Button>
+			</HStack>
+		</div>
+	);
+}
+
+/**
  * Shared result line for unified Run checks (facilitator connectivity + paywall probe).
  *
  * @param {object} props
@@ -711,6 +845,11 @@ function FacilitatorCard( {
 									<p className="simple-x402-page__wallet-error" role="alert">
 										{ walletError }
 									</p>
+								) }
+								{ config.gravatarLookup?.endpoint && (
+									<GravatarConnect
+										onAddress={ ( addr ) => onWalletChange( { wallet_address: addr } ) }
+									/>
 								) }
 							</div>
 						) : (

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace SimpleX402\Admin;
 
+use SimpleX402\Admin\GravatarLookupAjax;
 use SimpleX402\Admin\SettingsAjax;
 use SimpleX402\Admin\PaywallProbeAjax;
 use SimpleX402\Admin\TestConnectionAjax;
@@ -223,6 +224,11 @@ final class SettingsPage {
 			'paywallProbe'              => array(
 				'action' => PaywallProbeAjax::ACTION,
 				'nonce'  => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( PaywallProbeAjax::NONCE ) : '',
+			),
+			'gravatarLookup'            => array(
+				'action'   => GravatarLookupAjax::ACTION,
+				'nonce'    => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( GravatarLookupAjax::NONCE ) : '',
+				'endpoint' => GravatarLookupAjax::endpoint(),
 			),
 			'values'                    => array(
 				'paywall_mode'             => $this->settings->paywall_mode(),
