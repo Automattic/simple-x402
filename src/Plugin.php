@@ -20,6 +20,7 @@ use SimpleX402\Connectors\TestConnectorRegistrar;
 use SimpleX402\Facilitator\FacilitatorResolver;
 use SimpleX402\Services\FacilitatorHooks;
 use SimpleX402\Http\PaywallController;
+use SimpleX402\Payment\Providers\GravatarWallet;
 use SimpleX402\Services\AllPostsModeNoticeEmitter;
 use SimpleX402\Services\BotDetector;
 use SimpleX402\Services\CategoryRepository;
@@ -71,6 +72,8 @@ final class Plugin {
 		$indicator    = new PaywallIndicator( $rules, $settings );
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
+
+		GravatarWallet::register();
 
 		$indicator->register();
 

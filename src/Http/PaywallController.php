@@ -11,6 +11,7 @@ namespace SimpleX402\Http;
 
 use SimpleX402\Facilitator\Facilitator;
 use SimpleX402\Facilitator\FacilitatorResolver;
+use SimpleX402\Payment\PaymentProviderRegistry;
 use SimpleX402\Services\GrantStore;
 use SimpleX402\Services\PaywallClientProfile;
 use SimpleX402\Services\PaymentRequirementsBuilder;
@@ -65,15 +66,6 @@ final class PaywallController {
 	public const PROBE_HEADER = 'X-Simple-X402-Probe';
 
 	/**
-	 * Origin of the Gravatar Hosted Wallet popup. Filterable so staging /
-	 * preview deployments can point at a non-production host. Returning ''
-	 * suppresses the "Pay with Gravatar Wallet" CTA entirely.
-	 */
-	public const WALLET_ORIGIN_FILTER = 'simple_x402_gravatar_wallet_origin';
-
-	public const DEFAULT_WALLET_ORIGIN = 'https://gravatar.com';
-
-	/**
 	 * Lazily-resolved facilitator client + the builder that wraps its profile.
 	 * Deferred so requests that never reach the paywall path don't pay for
 	 * filter firing or option reads.
@@ -82,6 +74,8 @@ final class PaywallController {
 	private ?PaymentRequirementsBuilder $builder = null;
 
 	private ?PaymentSettlementNotifier $settlement_notifier;
+
+	private PaymentProviderRegistry $providers;
 
 	/** Set on the paywall enforcement path for Phase B; unused in Phase A beyond {@see self::CLIENT_PROFILE_FILTER}. */
 	private ?PaywallClientProfile $client_profile = null;
@@ -92,8 +86,10 @@ final class PaywallController {
 		private readonly SettingsRepository $settings,
 		private readonly FacilitatorResolver $resolver,
 		?PaymentSettlementNotifier $settlement_notifier = null,
+		?PaymentProviderRegistry $providers = null,
 	) {
 		$this->settlement_notifier = $settlement_notifier;
+		$this->providers           = $providers ?? new PaymentProviderRegistry();
 	}
 
 	private function settlement_notifier(): PaymentSettlementNotifier {
@@ -317,8 +313,8 @@ final class PaywallController {
 			? '<p class="sx402-error"><code>' . esc_html( $error_code ) . '</code></p>'
 			: '';
 
-		$gravatar_block = $this->gravatar_checkout_block( $request, $requirements, $price );
-		$hint_line      = '' !== $gravatar_block
+		$providers_block = $this->payment_providers_block( $request, $requirements );
+		$hint_line       = '' !== $providers_block
 			? '' // The CTA replaces the developer-facing hint.
 			: '<p class="sx402-hint">'
 				. esc_html__( 'x402 payment instructions are in the PAYMENT-REQUIRED HTTP response header.', 'simple-x402' )
@@ -327,7 +323,7 @@ final class PaywallController {
 		$html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'
 			. esc_html__( 'Payment required', 'simple-x402' )
 			. '</title>'
-			. $this->gravatar_checkout_styles()
+			. $this->html_402_styles()
 			. '</head><body><main><h1>'
 			. esc_html__( 'Payment required', 'simple-x402' )
 			. '</h1>'
@@ -339,7 +335,7 @@ final class PaywallController {
 				sprintf( __( 'Price: %s USDC', 'simple-x402' ), $price )
 			)
 			. '</p>'
-			. $gravatar_block
+			. $providers_block
 			. $hint_line
 			. $error_line
 			. '</main></body></html>';
@@ -348,59 +344,75 @@ final class PaywallController {
 	}
 
 	/**
-	 * "Pay with Gravatar Wallet" CTA + JS that opens the Gravatar Hosted
-	 * Wallet popup, awaits the EIP-3009 TransferWithAuthorization signature,
-	 * and replays the original request with a Payment-Signature header. The
-	 * Gravatar wallet only signs USDC on Base mainnet, so the CTA is hidden
-	 * for any other network.
+	 * Render the payment-provider buttons block. Each eligible provider gets a
+	 * `<div data-sx402-provider="…">` slot plus a `<script src="…">` tag; the
+	 * host loader walks the slots once registrations are in. Returns an empty
+	 * string if no providers are eligible, so the controller falls back to the
+	 * developer-facing PAYMENT-REQUIRED hint.
 	 *
 	 * @param array<string,mixed> $request
 	 * @param array<string,mixed> $requirements
 	 */
-	private function gravatar_checkout_block( array $request, array $requirements, string $price ): string {
-		$wallet_origin = self::gravatar_wallet_origin();
-		if ( '' === $wallet_origin ) {
+	private function payment_providers_block( array $request, array $requirements ): string {
+		// `add_query_arg( array() )` returns the current request URI (path + query
+		// string), so the retry hits the exact URL that 402'd — critical when the
+		// site uses Plain permalinks and posts are addressed via `?p=<id>`.
+		$resource_url = home_url( add_query_arg( array() ) );
+
+		$providers = $this->providers->eligible(
+			array(
+				'requirements' => $requirements,
+				'resource_url' => $resource_url,
+				'request'      => $request,
+			)
+		);
+		if ( empty( $providers ) ) {
 			return '';
 		}
 
-		// `add_query_arg( array() )` returns the current request URI (path + query
-		// string), so the popup retries against the exact URL that 402'd —
-		// critical when the site uses Plain permalinks and posts are addressed
-		// via `?p=<id>` rather than a path segment.
-		$resource_url = home_url( add_query_arg( array() ) );
-		$json_safe    = wp_json_encode(
-			array(
-				'gravatarOrigin' => $wallet_origin,
-				'resourceUrl'    => $resource_url,
-				'requirements'   => $requirements,
-			),
+		$context        = array(
+			'requirements' => $requirements,
+			'resourceUrl'  => $resource_url,
+			'providers'    => array(),
+		);
+		$slots          = '';
+		$script_tags    = '';
+		$seen_providers = array();
+		foreach ( $providers as $provider ) {
+			$id = $provider['id'];
+			if ( isset( $seen_providers[ $id ] ) ) {
+				continue;
+			}
+			$seen_providers[ $id ] = true;
+
+			$context['providers'][ $id ] = array(
+				'config' => $provider['config'],
+			);
+			$slots                      .= '<div data-sx402-provider="' . esc_attr( $id ) . '"></div>';
+			$script_tags                .= '<script defer src="' . esc_url( $provider['script_url'] ) . '"></script>';
+		}
+
+		$context_json = wp_json_encode(
+			$context,
 			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG
 		);
-		if ( false === $json_safe ) {
+		if ( false === $context_json ) {
 			return '';
 		}
 
-		$cta_label = esc_html__( 'Pay with Gravatar Wallet', 'simple-x402' );
-		$status    = esc_html__( 'Sign in to your Gravatar to pay and continue.', 'simple-x402' );
+		$status   = esc_html__( 'Choose a payment method to continue.', 'simple-x402' );
+		$host_url = plugins_url( 'assets/payment/host.js', SIMPLE_X402_FILE );
 
 		return '<div class="sx402-checkout">'
-			. '<button id="sx402-pay-button" class="sx402-pay-button" type="button">' . $cta_label . '</button>'
+			. '<div class="sx402-providers">' . $slots . '</div>'
 			. '<p id="sx402-status" class="sx402-status">' . $status . '</p>'
-			. '<script type="application/json" id="sx402-checkout-data">' . $json_safe . '</script>'
-			. '<script>' . $this->gravatar_checkout_script() . '</script>'
+			. '<script type="application/json" id="sx402-payment-context">' . $context_json . '</script>'
+			. '<script defer src="' . esc_url( $host_url ) . '"></script>'
+			. $script_tags
 			. '</div>';
 	}
 
-	/**
-	 * Resolved popup origin. Trimmed of trailing slashes so URL assembly
-	 * doesn't produce `https://gravatar.com//wallet/authorize`.
-	 */
-	public static function gravatar_wallet_origin(): string {
-		$raw = (string) apply_filters( self::WALLET_ORIGIN_FILTER, self::DEFAULT_WALLET_ORIGIN );
-		return rtrim( trim( $raw ), '/' );
-	}
-
-	private function gravatar_checkout_styles(): string {
+	private function html_402_styles(): string {
 		return <<<'CSS'
 <style>
 	body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 540px; margin: 4rem auto; padding: 0 1rem; color: #1d1d1f; }
@@ -409,6 +421,7 @@ final class PaywallController {
 	.sx402-excerpt { color: #444; margin: 12px 0 20px; }
 	.sx402-price { font-size: 15px; margin: 16px 0; }
 	.sx402-checkout { margin: 20px 0; }
+	.sx402-providers { display: flex; flex-direction: column; gap: 8px; }
 	.sx402-pay-button { font: inherit; font-size: 15px; padding: 10px 20px; border: 0; background: linear-gradient(135deg, #ff8a4c 0%, #ff5c3a 100%); color: white; border-radius: 8px; cursor: pointer; }
 	.sx402-pay-button:disabled { opacity: 0.6; cursor: not-allowed; }
 	.sx402-status { color: #6e6e73; font-size: 13px; margin: 10px 0 0; }
@@ -416,156 +429,6 @@ final class PaywallController {
 	.sx402-error code { background: #fef2f2; padding: 2px 6px; border-radius: 4px; }
 </style>
 CSS;
-	}
-
-	private function gravatar_checkout_script(): string {
-		return <<<'JS'
-(() => {
-	const data = JSON.parse(document.getElementById('sx402-checkout-data').textContent);
-	const button = document.getElementById('sx402-pay-button');
-	const statusEl = document.getElementById('sx402-status');
-	const GRAVATAR_ORIGIN = data.gravatarOrigin;
-	const TIMEOUT_MS = 300000;
-	const MAX_VALUE = 100000000n;
-
-	if (data.requirements?.network !== 'base') {
-		console.warn(
-			'[sx402] Gravatar Wallet only signs USDC on Base mainnet. Your facilitator is on "' +
-			data.requirements?.network +
-			'" — the signature will not settle against this network.'
-		);
-	}
-
-	function setStatus(msg) { statusEl.textContent = msg; }
-
-	function randomNonce() {
-		const arr = new Uint8Array(32);
-		crypto.getRandomValues(arr);
-		return '0x' + Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-	}
-
-	// Opens the Gravatar Hosted Wallet popup and resolves with the
-	// signed EIP-3009 authorization. Rejects on user cancel, popup
-	// block, popup close, timeout, or out-of-range value.
-	function requestSignature({ to, value, validAfter, validBefore }) {
-		let v;
-		try { v = BigInt(value); } catch (_) {
-			return Promise.reject(new Error('value is not an integer'));
-		}
-		if (v <= 0n || v > MAX_VALUE) {
-			return Promise.reject(new Error('value out of range (0 < value <= 100000000)'));
-		}
-		const origin = window.location.origin;
-		const nonce = randomNonce();
-		const params = new URLSearchParams({
-			to,
-			value: v.toString(10),
-			validAfter: String(validAfter),
-			validBefore: String(validBefore),
-			nonce,
-			origin,
-		});
-		const url = GRAVATAR_ORIGIN + '/wallet/authorize?' + params.toString();
-		const popup = window.open(url, 'gravatar-wallet-authorize', 'width=480,height=720');
-		if (!popup) return Promise.reject(new Error('popup blocked'));
-
-		return new Promise((resolve, reject) => {
-			let settled = false;
-			const cleanup = () => {
-				if (settled) return;
-				settled = true;
-				window.removeEventListener('message', handler);
-				clearInterval(watch);
-				clearTimeout(timer);
-			};
-			const handler = (ev) => {
-				if (ev.source !== popup) return;
-				if (ev.origin !== GRAVATAR_ORIGIN) return;
-				const msg = ev.data;
-				if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
-				if (msg.type === 'gravatar-wallet:signed') {
-					cleanup();
-					resolve(msg);
-				} else if (msg.type === 'gravatar-wallet:cancelled') {
-					cleanup();
-					try { popup.close(); } catch (_) {}
-					reject(new Error('user cancelled'));
-				}
-			};
-			const watch = setInterval(() => {
-				if (!settled && popup.closed) {
-					cleanup();
-					reject(new Error('wallet popup closed before responding'));
-				}
-			}, 500);
-			const timer = setTimeout(() => {
-				cleanup();
-				try { popup.close(); } catch (_) {}
-				reject(new Error('wallet popup timed out'));
-			}, TIMEOUT_MS);
-			window.addEventListener('message', handler);
-		});
-	}
-
-	button.addEventListener('click', async () => {
-		button.disabled = true;
-		setStatus('Opening Gravatar Wallet…');
-
-		const { requirements, resourceUrl } = data;
-		const now = Math.floor(Date.now() / 1000);
-
-		let signed;
-		try {
-			signed = await requestSignature({
-				to: requirements.payTo,
-				value: requirements.maxAmountRequired,
-				validAfter: now - 1,
-				validBefore: now + 600,
-			});
-		} catch (e) {
-			setStatus('Payment cancelled: ' + (e && e.message ? e.message : 'unknown error'));
-			button.disabled = false;
-			return;
-		}
-
-		setStatus('Settling payment…');
-		const envelope = {
-			x402Version: 1,
-			scheme: 'exact',
-			network: requirements.network,
-			payload: {
-				signature: signed.signature,
-				authorization: {
-					from: signed.from,
-					to: signed.to,
-					value: signed.value,
-					validAfter: signed.validAfter,
-					validBefore: signed.validBefore,
-					nonce: signed.nonce,
-				},
-			},
-		};
-		const headerVal = btoa(JSON.stringify(envelope));
-		const retried = await fetch(resourceUrl, {
-			headers: { 'Payment-Signature': headerVal },
-			credentials: 'same-origin',
-			cache: 'no-store',
-		});
-		if (retried.ok) {
-			setStatus('Paid. Loading…');
-			const html = await retried.text();
-			document.open();
-			document.write(html);
-			document.close();
-		} else {
-			let detail = '';
-			try { detail = (await retried.json()).error || ''; } catch (_) {}
-			setStatus('Settlement failed: ' + (detail || retried.status));
-			button.disabled = false;
-		}
-	});
-})();
-JS;
 	}
 
 	private function paywall_excerpt_fragment( int $post_id ): string {
