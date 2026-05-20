@@ -1,29 +1,29 @@
 <?php
 declare(strict_types=1);
 
-namespace SimpleX402\Tests\Unit;
+namespace X402Pay\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SimpleX402\Admin\PaywallIndicator;
-use SimpleX402\Admin\SettingsPage;
-use SimpleX402\Services\RuleResolver;
-use SimpleX402\Settings\SettingsRepository;
+use X402Pay\Admin\PaywallIndicator;
+use X402Pay\Admin\SettingsPage;
+use X402Pay\Services\RuleResolver;
+use X402Pay\Settings\SettingsRepository;
 use WP_Admin_Bar;
 
 final class PaywallIndicatorTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_is_admin']           = false;
-		$GLOBALS['__sx402_is_singular']        = true;
-		$GLOBALS['__sx402_queried_object_id']  = 42;
-		$GLOBALS['__sx402_request_uri']        = '/post-slug/';
-		$GLOBALS['__sx402_current_user_caps']  = array( 'manage_options' );
-		$GLOBALS['__sx402_filters']            = array();
-		$GLOBALS['__sx402_options']           = array();
+		$GLOBALS['__x402_pay_is_admin']           = false;
+		$GLOBALS['__x402_pay_is_singular']        = true;
+		$GLOBALS['__x402_pay_queried_object_id']  = 42;
+		$GLOBALS['__x402_pay_request_uri']        = '/post-slug/';
+		$GLOBALS['__x402_pay_current_user_caps']  = array( 'manage_options' );
+		$GLOBALS['__x402_pay_filters']            = array();
+		$GLOBALS['__x402_pay_options']           = array();
 	}
 
 	private function register_rule( ?array $rule ): void {
-		$GLOBALS['__sx402_filters'][ RuleResolver::HOOK ] = array(
+		$GLOBALS['__x402_pay_filters'][ RuleResolver::HOOK ] = array(
 			static fn ( $existing, array $ctx ) => $rule,
 		);
 	}
@@ -44,7 +44,7 @@ final class PaywallIndicatorTest extends TestCase {
 	}
 
 	public function test_adds_node_title_uses_everyone_label_when_set(): void {
-		$GLOBALS['__sx402_options'][ SettingsRepository::OPTION_NAME ] = array(
+		$GLOBALS['__x402_pay_options'][ SettingsRepository::OPTION_NAME ] = array(
 			'paywall_audience' => SettingsRepository::AUDIENCE_EVERYONE,
 		);
 		$this->register_rule( array( 'price' => '0.01', 'ttl' => 86400 ) );
@@ -78,7 +78,7 @@ final class PaywallIndicatorTest extends TestCase {
 	}
 
 	public function test_skips_on_wp_admin_screens(): void {
-		$GLOBALS['__sx402_is_admin'] = true;
+		$GLOBALS['__x402_pay_is_admin'] = true;
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
 		$bar = new WP_Admin_Bar();
 
@@ -88,7 +88,7 @@ final class PaywallIndicatorTest extends TestCase {
 	}
 
 	public function test_skips_when_user_lacks_manage_options(): void {
-		$GLOBALS['__sx402_current_user_caps'] = array();
+		$GLOBALS['__x402_pay_current_user_caps'] = array();
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
 		$bar = new WP_Admin_Bar();
 
@@ -98,7 +98,7 @@ final class PaywallIndicatorTest extends TestCase {
 	}
 
 	public function test_skips_when_not_singular(): void {
-		$GLOBALS['__sx402_is_singular'] = false;
+		$GLOBALS['__x402_pay_is_singular'] = false;
 		$this->register_rule( array( 'price' => '0.25', 'ttl' => 86400 ) );
 		$bar = new WP_Admin_Bar();
 
@@ -109,14 +109,14 @@ final class PaywallIndicatorTest extends TestCase {
 
 	public function test_passes_current_post_and_path_to_resolver(): void {
 		$captured = null;
-		$GLOBALS['__sx402_filters'][ RuleResolver::HOOK ] = array(
+		$GLOBALS['__x402_pay_filters'][ RuleResolver::HOOK ] = array(
 			static function ( $existing, array $ctx ) use ( &$captured ) {
 				$captured = $ctx;
 				return array( 'price' => '0.25', 'ttl' => 86400 );
 			},
 		);
-		$GLOBALS['__sx402_queried_object_id'] = 99;
-		$GLOBALS['__sx402_request_uri']       = '/deep/slug/';
+		$GLOBALS['__x402_pay_queried_object_id'] = 99;
+		$GLOBALS['__x402_pay_request_uri']       = '/deep/slug/';
 
 		$this->indicator()->add_node( new WP_Admin_Bar() );
 

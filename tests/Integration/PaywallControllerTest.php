@@ -1,63 +1,70 @@
 <?php
 declare(strict_types=1);
 
-namespace SimpleX402\Tests\Integration;
+namespace X402Pay\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
-use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Facilitator\FacilitatorResolver;
-use SimpleX402\Http\PaywallController;
-use SimpleX402\Services\FacilitatorHooks;
-use SimpleX402\Services\FacilitatorProfile;
-use SimpleX402\Services\GrantStore;
-use SimpleX402\Services\PaywallClientProfile;
-use SimpleX402\Services\RuleResolver;
-use SimpleX402\Services\X402HeaderCodec;
-use SimpleX402\Settings\SettingsRepository;
+use X402Pay\Connectors\ConnectorRegistry;
+use X402Pay\Facilitator\FacilitatorResolver;
+use X402Pay\Http\PaywallController;
+use X402Pay\Payment\PaymentProviderRegistry;
+use X402Pay\Services\FacilitatorHooks;
+use X402Pay\Services\FacilitatorProfile;
+use X402Pay\Services\GrantStore;
+use X402Pay\Services\PaywallClientProfile;
+use X402Pay\Services\RuleResolver;
+use X402Pay\Services\X402HeaderCodec;
+use X402Pay\Settings\SettingsRepository;
 
 final class PaywallControllerTest extends TestCase {
 
 	protected function setUp(): void {
-		$GLOBALS['__sx402_current_user_id'] = 0;
-		$GLOBALS['__sx402_filters']          = array();
-		$GLOBALS['__sx402_actions']          = array();
-		$GLOBALS['__sx402_transients']       = array();
-		$GLOBALS['__sx402_options']    = array(
-			'simple_x402_settings' => array(
-				'selected_facilitator_id' => 'simple_x402_test',
+		$GLOBALS['__x402_pay_current_user_id'] = 0;
+		$GLOBALS['__x402_pay_filters']         = array();
+		$GLOBALS['__x402_pay_actions']         = array();
+		$GLOBALS['__x402_pay_transients']      = array();
+		$GLOBALS['__x402_pay_registered_scripts'] = array();
+		$GLOBALS['__x402_pay_enqueued_scripts']   = array();
+		$GLOBALS['__x402_pay_inline_scripts']     = array();
+		$GLOBALS['__x402_pay_registered_styles']  = array();
+		$GLOBALS['__x402_pay_enqueued_styles']    = array();
+		$GLOBALS['__x402_pay_inline_styles']      = array();
+		$GLOBALS['__x402_pay_options']         = array(
+			'x402_pay_settings' => array(
+				'selected_facilitator_id' => 'x402_pay_test',
 				'facilitators'            => array(
-					'simple_x402_test' => array( 'wallet_address' => '0xreceiver' ),
+					'x402_pay_test' => array( 'wallet_address' => '0x1111111111111111111111111111111111111111' ),
 				),
 				'default_price'           => '0.01',
 				'paywall_audience'        => SettingsRepository::AUDIENCE_BOTS,
 			),
 		);
-		$GLOBALS['__sx402_posts']    = array();
-		$GLOBALS['__sx402_bloginfo'] = array( 'name' => 'Example Site' );
+		$GLOBALS['__x402_pay_posts']           = array();
+		$GLOBALS['__x402_pay_bloginfo']        = array( 'name' => 'Example Site' );
 		// Default: one x402_facilitator connector, resolved via the filter.
-		$GLOBALS['__sx402_connectors'] = array(
-			'simple_x402_test' => array( 'type' => ConnectorRegistry::FACILITATOR_TYPE ),
+		$GLOBALS['__x402_pay_connectors'] = array(
+			'x402_pay_test' => array( 'type' => ConnectorRegistry::FACILITATOR_TYPE ),
 		);
 		add_filter(
 			FacilitatorResolver::FILTER,
-			static fn ( $existing, $id ) => 'simple_x402_test' === $id && null === $existing
-				? new \SimpleX402\Services\X402FacilitatorClient( FacilitatorProfile::for_test() )
+			static fn ( $existing, $id ) => 'x402_pay_test' === $id && null === $existing
+				? new \X402Pay\Services\X402FacilitatorClient( FacilitatorProfile::for_test() )
 				: $existing,
 			10,
 			2
 		);
-		$GLOBALS['__sx402_response']   = array(
+		$GLOBALS['x402_pay_response']          = array(
 			'status'          => 200,
 			'headers'         => array(),
 			'success_headers' => array(),
 			'body'            => null,
 			'exited'          => false,
 		);
-		$_COOKIE                       = array();
-		$GLOBALS['__sx402_http']            = null;
-		$GLOBALS['__sx402_http_next']       = null;
-		$GLOBALS['__sx402_http_queue']      = array();
-		$GLOBALS['__sx402_current_user_caps'] = array();
+		$_COOKIE                                  = array();
+		$GLOBALS['__x402_pay_http']              = null;
+		$GLOBALS['__x402_pay_http_next']         = null;
+		$GLOBALS['__x402_pay_http_queue']        = array();
+		$GLOBALS['__x402_pay_current_user_caps'] = array();
 	}
 
 	private function controller( ?SettingsRepository $settings = null ): PaywallController {
@@ -70,15 +77,20 @@ final class PaywallControllerTest extends TestCase {
 	}
 
 	/**
-	 * Assert 402 JSON body includes requirements and the expected human-readable price (from the resolved rule).
+	 * Assert 402 JSON body matches the x402-spec envelope
+	 * `{ x402Version: 1, error?, accepts: [<PaymentRequirements>] }`.
+	 *
+	 * @return array Decoded body for callers that want to inspect specific keys.
 	 */
-	private function assert_402_json_body_has_price_and_requirements( string $expected_price ): void {
-		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+	private function assert_402_envelope(): array {
+		$ct = (string) ( $GLOBALS['x402_pay_response']['headers']['Content-Type'] ?? '' );
 		$this->assertStringContainsString( 'application/json', $ct );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
+		$body = json_decode( (string) $GLOBALS['x402_pay_response']['body'], true );
 		$this->assertIsArray( $body );
-		$this->assertSame( $expected_price, $body['price'] );
-		$this->assertArrayHasKey( 'requirements', $body );
+		$this->assertSame( 1, $body['x402Version'] );
+		$this->assertIsArray( $body['accepts'] );
+		$this->assertNotEmpty( $body['accepts'] );
+		return $body;
 	}
 
 	public function test_passes_through_when_no_rule_matches(): void {
@@ -90,14 +102,14 @@ final class PaywallControllerTest extends TestCase {
 				'headers' => array(),
 			)
 		);
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_passes_singular_flag_to_rule_filter(): void {
 		$seen = null;
 		add_filter(
-			'simple_x402_rule_for_request',
+			'x402_pay_rule_for_request',
 			static function ( $rule, $ctx ) use ( &$seen ) {
 				$seen = $ctx;
 				return null;
@@ -121,7 +133,7 @@ final class PaywallControllerTest extends TestCase {
 	}
 
 	public function test_client_profile_filter_runs_with_classified_headers_on_paywall_path(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$captured = null;
 		add_filter(
 			PaywallController::CLIENT_PROFILE_FILTER,
@@ -155,13 +167,13 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertTrue( $captured->is_bot );
 		$this->assertTrue( $captured->document_navigation_intent );
 		$this->assertTrue( $captured->json_accept_intent );
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$ct = (string) ( $GLOBALS['x402_pay_response']['headers']['Content-Type'] ?? '' );
 		$this->assertStringContainsString( 'text/html', $ct, 'Document navigation intent overrides JSON Accept for 402 body shape.' );
 	}
 
 	public function test_responds_402_when_rule_matches_and_no_signature(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$this->controller()->handle(
 			array(
@@ -172,18 +184,20 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assertArrayHasKey( 'PAYMENT-REQUIRED', $GLOBALS['__sx402_response']['headers'] );
-		$decoded = X402HeaderCodec::decode( $GLOBALS['__sx402_response']['headers']['PAYMENT-REQUIRED'] );
-		$this->assertSame( '0xreceiver', $decoded['payTo'] );
-		$this->assertSame( '10000', $decoded['maxAmountRequired'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
+		// PaymentRequirements live inside the spec envelope, not in a separate header.
+		$this->assertSame( '0x1111111111111111111111111111111111111111', $body['accepts'][0]['payTo'] );
+		$this->assertSame( '10000', $body['accepts'][0]['maxAmountRequired'] );
+		$this->assertSame( 'payment_required', $body['error'] );
+		// Spec response carries no `payment-required` header — everything is in the JSON body.
+		$this->assertArrayNotHasKey( 'PAYMENT-REQUIRED', $GLOBALS['x402_pay_response']['headers'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_administrator_bypasses_paywall(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_current_user_caps'] = array( 'manage_options' );
 
 		$this->controller()->handle(
 			array(
@@ -194,15 +208,15 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_valid_paywall_probe_header_overrides_admin_bypass(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
-		$GLOBALS['__sx402_current_user_id']   = 1;
-		$nonce                                  = wp_create_nonce( PaywallController::PROBE_NONCE_ACTION );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_current_user_caps'] = array( 'manage_options' );
+		$GLOBALS['__x402_pay_current_user_id']   = 1;
+		$nonce                                    = wp_create_nonce( PaywallController::PROBE_NONCE_ACTION );
 
 		$this->controller()->handle(
 			array(
@@ -213,13 +227,13 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_invalid_probe_nonce_admin_still_bypasses(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_current_user_caps'] = array( 'manage_options' );
 
 		$this->controller()->handle(
 			array(
@@ -230,13 +244,13 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_bypass_filter_can_widen_to_non_admin(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		add_filter( 'simple_x402_bypass_paywall', static fn () => true, 10, 3 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_bypass_paywall', static fn () => true, 10, 3 );
 
 		$this->controller()->handle(
 			array(
@@ -247,14 +261,14 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_bypass_filter_can_override_admin_default(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_current_user_caps'] = array( 'manage_options' );
-		add_filter( 'simple_x402_bypass_paywall', static fn () => false, 10, 3 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_current_user_caps'] = array( 'manage_options' );
+		add_filter( 'x402_pay_bypass_paywall', static fn () => false, 10, 3 );
 
 		$this->controller()->handle(
 			array(
@@ -265,17 +279,20 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_bypass_filter_receives_request_and_rule(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$seen = null;
 		add_filter(
-			'simple_x402_bypass_paywall',
+			'x402_pay_bypass_paywall',
 			static function ( $bypass, $request, $rule ) use ( &$seen ) {
-				$seen = array( 'request' => $request, 'rule' => $rule );
+				$seen = array(
+					'request' => $request,
+					'rule'    => $rule,
+				);
 				return $bypass;
 			},
 			10,
@@ -298,7 +315,7 @@ final class PaywallControllerTest extends TestCase {
 	}
 
 	public function test_allows_request_with_live_grant_via_header_token(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$token = ( new GrantStore() )->issue( '/foo', 60, array() );
 
 		$this->controller()->handle(
@@ -310,13 +327,13 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_allows_request_with_live_grant_via_cookie(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$token                                       = ( new GrantStore() )->issue( '/foo', 60, array() );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$token                                      = ( new GrantStore() )->issue( '/foo', 60, array() );
 		$_COOKIE[ PaywallController::GRANT_COOKIE ] = $token;
 
 		$this->controller()->handle(
@@ -328,15 +345,24 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
+	}
+
+	public function test_grant_cookie_token_is_unslashed_and_sanitized(): void {
+		$_COOKIE[ PaywallController::GRANT_COOKIE ] = '<script>alert(1)</script>';
+
+		$reflection = new \ReflectionMethod( PaywallController::class, 'extract_grant_token' );
+		$reflection->setAccessible( true );
+
+		$this->assertSame( '', $reflection->invoke( $this->controller(), array( 'headers' => array() ) ) );
 	}
 
 	public function test_wallet_address_header_alone_no_longer_bypasses(): void {
 		// Pre-fix: sending X-Wallet-Address with the paying wallet was enough
 		// to redeem the grant for that path. Wallet addresses are public, so
 		// that bypass must not work anymore.
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		( new GrantStore() )->issue( '/foo', 60, array( 'wallet' => '0xbuyer' ) );
 
 		$this->controller()->handle(
@@ -348,11 +374,11 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
 	}
 
 	public function test_token_for_one_path_does_not_redeem_against_another(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$token = ( new GrantStore() )->issue( '/foo', 60, array() );
 
 		$this->controller()->handle(
@@ -364,11 +390,47 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+	}
+
+	public function test_token_for_one_query_resource_does_not_redeem_against_another(): void {
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$token = ( new GrantStore() )->issue( 'https://example.test/?p=1', 60, array() );
+
+		$this->controller()->handle(
+			array(
+				'path'         => '/',
+				'resource_url' => 'https://example.test/?p=2',
+				'method'       => 'GET',
+				'post_id'      => 2,
+				'headers'      => array( PaywallController::GRANT_HEADER => $token ),
+			)
+		);
+
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
+		$this->assertSame( 'https://example.test/?p=2', $body['accepts'][0]['resource'] );
+	}
+
+	public function test_invalid_receiving_wallet_leaves_paywall_inert(): void {
+		$GLOBALS['__x402_pay_options'][ SettingsRepository::OPTION_NAME ]['facilitators']['x402_pay_test']['wallet_address'] = '0xnot-a-wallet';
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(),
+			)
+		);
+
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_client_profile_filter_not_invoked_when_grant_short_circuits(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$token = ( new GrantStore() )->issue( '/foo', 60, array() );
 
 		$filter_runs = 0;
@@ -392,14 +454,14 @@ final class PaywallControllerTest extends TestCase {
 		);
 
 		$this->assertSame( 0, $filter_runs, 'Classifier and filter should not run when an existing grant bypasses enforcement.' );
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
 	}
 
 	public function test_requirements_use_managed_pool_pay_to_when_filter_returns_address(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		add_filter(
 			FacilitatorHooks::MANAGED_POOL_PAY_TO,
-			static fn ( string $p, string $id ): string => 'simple_x402_test' === $id
+			static fn ( string $p, string $id ): string => 'x402_pay_test' === $id
 				? '0x1111111111111111111111111111111111111111'
 				: $p,
 			10,
@@ -415,15 +477,21 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
-		$this->assertIsArray( $body );
-		$this->assertSame( '0x1111111111111111111111111111111111111111', $body['requirements']['payTo'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
+		$this->assertSame( '0x1111111111111111111111111111111111111111', $body['accepts'][0]['payTo'] );
 	}
 
 	public function test_verifies_and_settles_then_emits_grant_token_and_cookie(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01', 'ttl' => 600 ), 10, 2 );
+		add_filter(
+			'x402_pay_rule_for_request',
+			static fn () => array(
+				'price' => '0.01',
+				'ttl'   => 600,
+			),
+			10,
+			2
+		);
 
 		$payload = X402HeaderCodec::encode(
 			array(
@@ -432,7 +500,7 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$GLOBALS['__sx402_http_queue'] = array(
+		$GLOBALS['__x402_pay_http_queue'] = array(
 			array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '{"isValid":true}',
@@ -445,20 +513,21 @@ final class PaywallControllerTest extends TestCase {
 
 		$this->controller()->handle(
 			array(
-				'path'    => '/foo',
-				'method'  => 'GET',
-				'post_id' => 0,
-				'headers' => array( 'Payment-Signature' => $payload ),
+				'path'         => '/foo',
+				'resource_url' => 'https://example.test/foo?preview=1',
+				'method'       => 'GET',
+				'post_id'      => 0,
+				'headers'      => array( 'X-Payment' => $payload ),
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
 
-		$success_headers = $GLOBALS['__sx402_response']['success_headers'];
+		$success_headers = $GLOBALS['x402_pay_response']['success_headers'];
 		$grant_line      = self::find_header_line( $success_headers, PaywallController::GRANT_HEADER . ': ' );
 		$cookie_line     = self::find_header_line( $success_headers, 'Set-Cookie: ' . PaywallController::GRANT_COOKIE . '=' );
 		$this->assertNotNull( $grant_line, 'X-Payment-Grant header must be staged on the success path.' );
-		$this->assertNotNull( $cookie_line, 'sx402_grant cookie must be staged on the success path.' );
+		$this->assertNotNull( $cookie_line, 'x402_pay_grant cookie must be staged on the success path.' );
 
 		// Cookie must carry the security-critical attributes — Secure, HttpOnly,
 		// SameSite=Strict — and a Max-Age that matches the rule TTL.
@@ -468,9 +537,113 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertStringContainsString( 'Max-Age=600', $cookie_line );
 		$this->assertStringContainsString( 'Path=/foo', $cookie_line );
 
-		// The token from the response header must redeem against the same path.
+		// The token from the response header must redeem against the exact paid
+		// resource, not just the path portion.
 		$token = substr( $grant_line, strlen( PaywallController::GRANT_HEADER . ': ' ) );
-		$this->assertTrue( ( new GrantStore() )->redeem( $token, '/foo' ) );
+		$this->assertTrue( ( new GrantStore() )->redeem( $token, 'https://example.test/foo?preview=1' ) );
+		$this->assertFalse( ( new GrantStore() )->redeem( $token, '/foo' ) );
+	}
+
+	public function test_settle_success_emits_x_payment_response_receipt(): void {
+		add_filter(
+			'x402_pay_rule_for_request',
+			static fn () => array(
+				'price' => '0.01',
+				'ttl'   => 60,
+			),
+			10,
+			2
+		);
+
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+
+		$GLOBALS['__x402_pay_http_queue'] = array(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":true,"transaction":"0xdead","network":"base-sepolia"}',
+			),
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'X-Payment' => $payload ),
+			)
+		);
+
+		$line = self::find_header_line(
+			$GLOBALS['x402_pay_response']['success_headers'],
+			'X-Payment-Response: '
+		);
+		$this->assertNotNull( $line, 'Spec-required X-Payment-Response settlement receipt must be staged.' );
+
+		// Receipt is base64(JSON) per spec — decode and assert shape.
+		$encoded = substr( $line, strlen( 'X-Payment-Response: ' ) );
+		$receipt = X402HeaderCodec::decode( $encoded );
+		$this->assertIsArray( $receipt );
+		$this->assertTrue( $receipt['success'] );
+		$this->assertSame( '0xdead', $receipt['transaction'] );
+		$this->assertSame( 'base-sepolia', $receipt['network'] );
+		$this->assertSame( '0xbuyer', $receipt['payer'] );
+	}
+
+	public function test_grant_cookie_path_encodes_attribute_separators(): void {
+		add_filter(
+			'x402_pay_rule_for_request',
+			static fn () => array(
+				'price' => '0.01',
+				'ttl'   => 600,
+			),
+			10,
+			2
+		);
+
+		$payload = X402HeaderCodec::encode(
+			array(
+				'scheme'  => 'exact',
+				'payload' => array( 'authorization' => array( 'from' => '0xbuyer' ) ),
+			)
+		);
+
+		$GLOBALS['__x402_pay_http_queue'] = array(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":true,"transaction":"0xdead"}',
+			),
+		);
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/foo; Domain=example.test',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array( 'X-Payment' => $payload ),
+			)
+		);
+
+		$cookie_line = self::find_header_line(
+			$GLOBALS['x402_pay_response']['success_headers'],
+			'Set-Cookie: ' . PaywallController::GRANT_COOKIE . '='
+		);
+
+		$this->assertNotNull( $cookie_line );
+		$this->assertStringContainsString( 'Path=/foo%3B%20Domain=example.test', $cookie_line );
+		$this->assertStringNotContainsString( '; Domain=example.test', $cookie_line );
 	}
 
 	/**
@@ -493,7 +666,15 @@ final class PaywallControllerTest extends TestCase {
 				$captured[] = $ctx;
 			}
 		);
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.02', 'ttl' => 60 ), 10, 2 );
+		add_filter(
+			'x402_pay_rule_for_request',
+			static fn () => array(
+				'price' => '0.02',
+				'ttl'   => 60,
+			),
+			10,
+			2
+		);
 
 		$payload = X402HeaderCodec::encode(
 			array(
@@ -502,7 +683,7 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$GLOBALS['__sx402_http_queue'] = array(
+		$GLOBALS['__x402_pay_http_queue'] = array(
 			array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '{"isValid":true}',
@@ -518,7 +699,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/paid-post',
 				'method'  => 'GET',
 				'post_id' => 42,
-				'headers' => array( 'Payment-Signature' => $payload ),
+				'headers' => array( 'X-Payment' => $payload ),
 			)
 		);
 
@@ -526,12 +707,12 @@ final class PaywallControllerTest extends TestCase {
 		$this->assertSame( '0xabc123', $captured[0]['transaction'] );
 		$this->assertSame( 42, $captured[0]['post_id'] );
 		$this->assertSame( '0.02', $captured[0]['amount'] );
-		$this->assertSame( 'simple_x402_test', $captured[0]['connector_id'] );
-		$this->assertSame( '0xreceiver', $captured[0]['pay_to'] );
+		$this->assertSame( 'x402_pay_test', $captured[0]['connector_id'] );
+		$this->assertSame( '0x1111111111111111111111111111111111111111', $captured[0]['pay_to'] );
 	}
 
 	public function test_verify_failure_responds_402(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$payload = X402HeaderCodec::encode(
 			array(
@@ -540,7 +721,7 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$GLOBALS['__sx402_http_queue'] = array(
+		$GLOBALS['__x402_pay_http_queue'] = array(
 			array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '{"isValid":false,"invalidReason":"bad_sig"}',
@@ -552,40 +733,36 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'Payment-Signature' => $payload ),
+				'headers' => array( 'X-Payment' => $payload ),
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
-		$this->assertIsArray( $body );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
 		$this->assertSame( 'verify_failed', $body['error'] );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_invalid_signature_header_responds_402_with_price(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$this->controller()->handle(
 			array(
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'Payment-Signature' => 'not-valid-base64!!!' ),
+				'headers' => array( 'X-Payment' => 'not-valid-base64!!!' ),
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
-		$this->assertIsArray( $body );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
 		$this->assertSame( 'invalid_signature_header', $body['error'] );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_settle_failure_responds_402_with_price(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.25' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.25' ), 10, 2 );
 
 		$payload = X402HeaderCodec::encode(
 			array(
@@ -594,7 +771,7 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$GLOBALS['__sx402_http_queue'] = array(
+		$GLOBALS['__x402_pay_http_queue'] = array(
 			array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '{"isValid":true}',
@@ -610,20 +787,18 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/foo',
 				'method'  => 'GET',
 				'post_id' => 0,
-				'headers' => array( 'Payment-Signature' => $payload ),
+				'headers' => array( 'X-Payment' => $payload ),
 			)
 		);
 
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.25' );
-		$body = json_decode( (string) $GLOBALS['__sx402_response']['body'], true );
-		$this->assertIsArray( $body );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$body = $this->assert_402_envelope();
 		$this->assertSame( 'settle_failed', $body['error'] );
-		$this->assertTrue( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertTrue( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_bot_json_accept_without_document_navigation_serves_json_402(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$googlebot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 		$this->controller()->handle(
 			array(
@@ -638,18 +813,18 @@ final class PaywallControllerTest extends TestCase {
 				),
 			)
 		);
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$this->assert_402_envelope();
 	}
 
 	public function test_bot_document_navigation_serves_html_402_with_excerpt(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_posts'][7] = array(
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_posts'][7] = array(
 			'post_type'    => 'post',
 			'post_status'  => 'publish',
 			'post_excerpt' => 'Teaser for bots and browsers.',
 		);
-		$googlebot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+		$googlebot                       = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 		$this->controller()->handle(
 			array(
 				'path'    => '/p/7',
@@ -663,24 +838,25 @@ final class PaywallControllerTest extends TestCase {
 				),
 			)
 		);
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$ct = (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$ct = (string) ( $GLOBALS['x402_pay_response']['headers']['Content-Type'] ?? '' );
 		$this->assertStringContainsString( 'text/html', $ct );
-		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
 		$this->assertStringContainsString( 'Teaser for bots and browsers.', $html );
 		$this->assertStringContainsString( '0.01', $html );
-		$this->assertArrayHasKey( 'PAYMENT-REQUIRED', $GLOBALS['__sx402_response']['headers'] );
+		// Spec response is body-only; no separate `payment-required` HTTP header.
+		$this->assertArrayNotHasKey( 'PAYMENT-REQUIRED', $GLOBALS['x402_pay_response']['headers'] );
 	}
 
 	public function test_everyone_audience_human_document_navigation_serves_html_402(): void {
-		$GLOBALS['__sx402_options']['simple_x402_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_posts'][42] = array(
+		$GLOBALS['__x402_pay_options']['x402_pay_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_posts'][42] = array(
 			'post_type'    => 'post',
 			'post_status'  => 'publish',
 			'post_excerpt' => 'Everyone mode excerpt.',
 		);
-		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+		$human_ua                         = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 		$this->controller()->handle(
 			array(
 				'path'    => '/story',
@@ -694,22 +870,22 @@ final class PaywallControllerTest extends TestCase {
 				),
 			)
 		);
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assertStringContainsString( 'text/html', (string) ( $GLOBALS['__sx402_response']['headers']['Content-Type'] ?? '' ) );
-		$this->assertStringContainsString( 'Everyone mode excerpt.', (string) $GLOBALS['__sx402_response']['body'] );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertStringContainsString( 'text/html', (string) ( $GLOBALS['x402_pay_response']['headers']['Content-Type'] ?? '' ) );
+		$this->assertStringContainsString( 'Everyone mode excerpt.', (string) $GLOBALS['x402_pay_response']['body'] );
 	}
 
 	public function test_html_402_renders_site_identity_and_post_title(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_bloginfo']['name'] = 'Example Site';
-		$GLOBALS['__sx402_site_icon_url']    = 'https://example.test/icon-96.png';
-		$GLOBALS['__sx402_posts'][55]        = array(
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_bloginfo']['name'] = 'Example Site';
+		$GLOBALS['__x402_pay_site_icon_url']    = 'https://example.test/icon-96.png';
+		$GLOBALS['__x402_pay_posts'][55]        = array(
 			'post_type'    => 'post',
 			'post_status'  => 'publish',
 			'post_title'   => 'The Headline of the Story',
 			'post_excerpt' => 'A teaser sentence to whet the appetite.',
 		);
-		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+		$human_ua                                = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
 		$this->controller()->handle(
 			array(
@@ -725,19 +901,19 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
 		// Site identity row at the top: clickable wrapper with the site
 		// name and the configured Site Icon as the favicon-style avatar.
-		$this->assertStringContainsString( 'class="sx402-site"', $html );
+		$this->assertStringContainsString( 'class="x402-pay-site"', $html );
 		$this->assertStringContainsString( 'Example Site', $html );
 		$this->assertStringContainsString( 'src="https://example.test/icon-96.png"', $html );
 		// Post title rendered as the headline (replaces the generic
 		// "Payment required" h1 from the old layout).
-		$this->assertStringContainsString( '<h2 class="sx402-title">The Headline of the Story</h2>', $html );
+		$this->assertStringContainsString( '<h2 class="x402-pay-title">The Headline of the Story</h2>', $html );
 		// Excerpt block remains.
 		$this->assertStringContainsString( 'A teaser sentence to whet the appetite.', $html );
 		// Price now rendered as a labelled card, not a bare line.
-		$this->assertStringContainsString( 'class="sx402-price-card"', $html );
+		$this->assertStringContainsString( 'class="x402-pay-price-card"', $html );
 		$this->assertStringContainsString( '0.01 USDC', $html );
 	}
 
@@ -746,8 +922,11 @@ final class PaywallControllerTest extends TestCase {
 		// label was misleading: payment grants TTL-bound transient access,
 		// not single-shot access).
 		add_filter(
-			'simple_x402_rule_for_request',
-			static fn () => array( 'price' => '0.01', 'ttl' => 7200 ),
+			'x402_pay_rule_for_request',
+			static fn () => array(
+				'price' => '0.01',
+				'ttl'   => 7200,
+			),
 			10,
 			2
 		);
@@ -767,16 +946,16 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
 		$this->assertStringContainsString( 'Access for 2 hours', $html );
 		$this->assertStringNotContainsString( 'One-time access', $html );
 	}
 
 	public function test_initial_402_does_not_render_payment_required_as_an_error(): void {
-		// Bare first visit (no PAYMENT-SIGNATURE) is the expected state, not
-		// a failure — the eyebrow + price card already say so. Rendering
+		// Bare first visit (no X-PAYMENT) is the expected state, not a
+		// failure — the eyebrow + price card already say so. Rendering
 		// "payment_required" as an error block was misleading dev noise.
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
 		$this->controller()->handle(
@@ -793,13 +972,13 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$html = (string) $GLOBALS['__sx402_response']['body'];
-		$this->assertStringNotContainsString( 'class="sx402-error"', $html );
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
+		$this->assertStringNotContainsString( 'class="x402-pay-error"', $html );
 		$this->assertStringNotContainsString( 'payment_required', $html );
 	}
 
 	public function test_invalid_signature_header_renders_friendly_error_with_dev_data_attr(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
 		$this->controller()->handle(
@@ -808,29 +987,29 @@ final class PaywallControllerTest extends TestCase {
 				'method'  => 'GET',
 				'post_id' => 0,
 				'headers' => array(
-					'User-Agent'        => $human_ua,
-					'Accept'            => 'text/html',
-					'Sec-Fetch-Mode'    => 'navigate',
-					'Sec-Fetch-Dest'    => 'document',
-					'Payment-Signature' => 'this-is-not-base64-x402-data',
+					'User-Agent'     => $human_ua,
+					'Accept'         => 'text/html',
+					'Sec-Fetch-Mode' => 'navigate',
+					'Sec-Fetch-Dest' => 'document',
+					'X-Payment'      => 'this-is-not-base64-x402-data',
 				),
 			)
 		);
 
-		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
 		// The user gets prose, not a stack trace.
-		$this->assertStringContainsString( 'class="sx402-error"', $html );
+		$this->assertStringContainsString( 'class="x402-pay-error"', $html );
 		$this->assertStringContainsString( 'payment data sent by your wallet was invalid', $html );
 		// The raw code is still on the element so devtools / extensions /
 		// log scrapers can read it without us showing it to humans.
-		$this->assertStringContainsString( 'data-sx402-error="invalid_signature_header"', $html );
+		$this->assertStringContainsString( 'data-x402-pay-error="invalid_signature_header"', $html );
 	}
 
 	public function test_html_402_omits_site_block_when_no_name_or_icon(): void {
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
-		$GLOBALS['__sx402_bloginfo']['name'] = '';
-		$GLOBALS['__sx402_site_icon_url']    = '';
-		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_bloginfo']['name'] = '';
+		$GLOBALS['__x402_pay_site_icon_url']    = '';
+		$human_ua                                = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
 		$this->controller()->handle(
 			array(
@@ -846,15 +1025,76 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$html = (string) $GLOBALS['__sx402_response']['body'];
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
 		// Empty site name + missing icon → no identity row at all, rather
 		// than an empty placeholder.
-		$this->assertStringNotContainsString( 'class="sx402-site"', $html );
+		$this->assertStringNotContainsString( 'class="x402-pay-site"', $html );
+	}
+
+	public function test_html_402_sanitizes_payment_provider_slots_and_context_json(): void {
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		add_filter(
+			PaymentProviderRegistry::FILTER,
+			static fn ( array $providers ): array => array_merge(
+				$providers,
+				array(
+					array(
+						'id'          => 'bad"><script>',
+						'label'       => 'Bad',
+						'script_url'  => 'https://example.test/bad.js',
+						'is_eligible' => true,
+					),
+					array(
+						'id'          => 'Good_ID',
+						'label'       => 'Good',
+						'script_url'  => 'https://example.test/provider.js?x=<bad>&q="',
+						'is_eligible' => true,
+						'config'      => array(
+							'label' => '<tag>&"\'',
+						),
+					),
+				)
+			),
+			10,
+			2
+		);
+		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+
+		$this->controller()->handle(
+			array(
+				'path'    => '/providers',
+				'method'  => 'GET',
+				'post_id' => 0,
+				'headers' => array(
+					'User-Agent'     => $human_ua,
+					'Accept'         => 'text/html',
+					'Sec-Fetch-Mode' => 'navigate',
+					'Sec-Fetch-Dest' => 'document',
+				),
+			)
+		);
+
+		$html = (string) $GLOBALS['x402_pay_response']['body'];
+		$this->assertArrayHasKey( 'x402-pay-402', $GLOBALS['__x402_pay_enqueued_styles'] );
+		$this->assertArrayHasKey( 'x402-pay-402-host', $GLOBALS['__x402_pay_enqueued_scripts'] );
+		$this->assertArrayHasKey( 'x402-pay-402-provider-good_id', $GLOBALS['__x402_pay_enqueued_scripts'] );
+		$this->assertNotEmpty( $GLOBALS['__x402_pay_inline_styles']['x402-pay-402'] ?? array() );
+		$this->assertNotEmpty( $GLOBALS['__x402_pay_inline_scripts']['x402-pay-402-host']['before'] ?? array() );
+		$this->assertStringContainsString( 'data-x402-pay-provider="good_id"', $html );
+		$this->assertStringContainsString( 'data-x402-pay-providers', $html );
+		$this->assertStringContainsString( 'data-x402-pay-flow', $html );
+		$this->assertStringContainsString( 'id="x402-pay-status" role="status" aria-live="polite"', $html );
+		$this->assertStringContainsString( 'data-x402-pay-modal', $html );
+		$this->assertStringContainsString( 'data-x402-pay-modal-message', $html );
+		$this->assertStringContainsString( 'data-x402-pay-modal-close', $html );
+		$this->assertStringNotContainsString( 'bad&quot;&gt;&lt;script&gt;', $html );
+		$this->assertStringNotContainsString( '<tag>', $html );
+		$this->assertStringContainsString( '\u003Ctag\u003E\u0026\u0022\u0027', $html );
 	}
 
 	public function test_everyone_audience_human_json_accept_serves_json_402(): void {
-		$GLOBALS['__sx402_options']['simple_x402_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_options']['x402_pay_settings']['paywall_audience'] = SettingsRepository::AUDIENCE_EVERYONE;
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 		$human_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 		$this->controller()->handle(
 			array(
@@ -869,8 +1109,8 @@ final class PaywallControllerTest extends TestCase {
 				),
 			)
 		);
-		$this->assertSame( 402, $GLOBALS['__sx402_response']['status'] );
-		$this->assert_402_json_body_has_price_and_requirements( '0.01' );
+		$this->assertSame( 402, $GLOBALS['x402_pay_response']['status'] );
+		$this->assert_402_envelope();
 	}
 
 	/**
@@ -908,12 +1148,22 @@ final class PaywallControllerTest extends TestCase {
 			array( 'payload' => array( 'authorization' => array( 'from' => '0xwallet' ) ) )
 		);
 		add_filter(
-			'simple_x402_rule_for_request',
-			static fn() => array( 'price' => '0.01', 'ttl' => 60, 'description' => 'Test' )
+			'x402_pay_rule_for_request',
+			static fn() => array(
+				'price'       => '0.01',
+				'ttl'         => 60,
+				'description' => 'Test',
+			)
 		);
-		$GLOBALS['__sx402_http_queue'] = array(
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"isValid":true}' ),
-			array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true,"transaction":"0xtx"}' ),
+		$GLOBALS['__x402_pay_http_queue'] = array(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"isValid":true}',
+			),
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '{"success":true,"transaction":"0xtx"}',
+			),
 		);
 
 		$controller = $this->controller();
@@ -922,7 +1172,7 @@ final class PaywallControllerTest extends TestCase {
 				'path'    => '/premium',
 				'method'  => 'GET',
 				'post_id' => 1,
-				'headers' => array( 'Payment-Signature' => $payload ),
+				'headers' => array( 'X-Payment' => $payload ),
 			)
 		);
 
@@ -939,8 +1189,8 @@ final class PaywallControllerTest extends TestCase {
 	public function test_paywall_is_inert_when_no_facilitator_is_selected(): void {
 		// Clear the default test-setup selection. No facilitator = paywall
 		// passes requests through untouched even when a rule matches.
-		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = '';
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_options']['x402_pay_settings']['selected_facilitator_id'] = '';
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$this->controller()->handle(
 			array(
@@ -951,14 +1201,14 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 
 	public function test_paywall_is_inert_when_selected_connector_is_unknown(): void {
 		// Stale selection pointing at a connector that isn't registered any more.
-		$GLOBALS['__sx402_options']['simple_x402_settings']['selected_facilitator_id'] = 'nonexistent';
-		add_filter( 'simple_x402_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
+		$GLOBALS['__x402_pay_options']['x402_pay_settings']['selected_facilitator_id'] = 'nonexistent';
+		add_filter( 'x402_pay_rule_for_request', static fn () => array( 'price' => '0.01' ), 10, 2 );
 
 		$this->controller()->handle(
 			array(
@@ -969,7 +1219,7 @@ final class PaywallControllerTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( 200, $GLOBALS['__sx402_response']['status'] );
-		$this->assertFalse( $GLOBALS['__sx402_response']['exited'] );
+		$this->assertSame( 200, $GLOBALS['x402_pay_response']['status'] );
+		$this->assertFalse( $GLOBALS['x402_pay_response']['exited'] );
 	}
 }

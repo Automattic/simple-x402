@@ -2,22 +2,22 @@
 /**
  * HTTP client for an x402 facilitator.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Services;
+namespace X402Pay\Services;
 
-use SimpleX402\Facilitator\Facilitator;
-use SimpleX402\Facilitator\TestResult;
+use X402Pay\Facilitator\Facilitator;
+use X402Pay\Facilitator\TestResult;
 use Throwable;
 
 /**
  * Posts PaymentRequirements + PaymentPayload bodies to a facilitator's
  * /verify and /settle endpoints using wp_remote_post.
  *
- * Authentication is delegated to the optional {@see \SimpleX402\Facilitator\RequestSigner}
+ * Authentication is delegated to the optional {@see \X402Pay\Facilitator\RequestSigner}
  * carried by the profile — the client never knows which scheme is in play
  * (no auth, static bearer, signed JWT, …) and just merges whatever headers
  * the signer returns into each outbound request.
@@ -164,8 +164,8 @@ final class X402FacilitatorClient implements Facilitator {
 			'Content-Type' => 'application/json',
 			'Accept'       => 'application/json',
 		);
-		$base = rtrim( $this->profile->facilitator_url, '/' ) . '/';
-		$url  = $base . ltrim( $endpoint, '/' );
+		$base    = rtrim( $this->profile->facilitator_url, '/' ) . '/';
+		$url     = $base . ltrim( $endpoint, '/' );
 
 		if ( null !== $this->profile->signer ) {
 			try {

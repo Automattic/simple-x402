@@ -1,23 +1,23 @@
 <?php
 declare(strict_types=1);
 
-namespace SimpleX402\Tests\Unit;
+namespace X402Pay\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SimpleX402\Plugin;
+use X402Pay\Plugin;
 
 final class PluginHeadersTest extends TestCase {
 
 	/**
 	 * Regression test: $_SERVER delivers HTTP_* keys in ALL_CAPS with
 	 * underscores. The collector normalises them to canonical HTTP
-	 * title-case so downstream lookups (e.g. `X-Payment-Grant`,
-	 * `Payment-Signature`) match what real traffic sends.
+	 * title-case so downstream lookups (e.g. `X-Payment-Grant`, `X-Payment`)
+	 * match what real traffic sends.
 	 */
 	public function test_collect_headers_normalises_to_title_case(): void {
-		$_SERVER['HTTP_X_PAYMENT_GRANT']   = 'abc-grant-token';
-		$_SERVER['HTTP_PAYMENT_SIGNATURE'] = 'abc';
-		$_SERVER['HTTP_USER_AGENT']        = 'Mozilla/5.0';
+		$_SERVER['HTTP_X_PAYMENT_GRANT'] = 'abc-grant-token';
+		$_SERVER['HTTP_X_PAYMENT']       = 'abc';
+		$_SERVER['HTTP_USER_AGENT']      = 'Mozilla/5.0';
 
 		$reflection = new \ReflectionMethod( Plugin::class, 'collect_headers' );
 		$reflection->setAccessible( true );
@@ -25,10 +25,10 @@ final class PluginHeadersTest extends TestCase {
 
 		$this->assertArrayHasKey( 'X-Payment-Grant', $headers );
 		$this->assertSame( 'abc-grant-token', $headers['X-Payment-Grant'] );
-		$this->assertArrayHasKey( 'Payment-Signature', $headers );
+		$this->assertArrayHasKey( 'X-Payment', $headers );
 		$this->assertArrayHasKey( 'User-Agent', $headers );
 
-		unset( $_SERVER['HTTP_X_PAYMENT_GRANT'], $_SERVER['HTTP_PAYMENT_SIGNATURE'], $_SERVER['HTTP_USER_AGENT'] );
+		unset( $_SERVER['HTTP_X_PAYMENT_GRANT'], $_SERVER['HTTP_X_PAYMENT'], $_SERVER['HTTP_USER_AGENT'] );
 	}
 
 	public function test_collect_headers_always_includes_accept_and_sec_fetch_keys(): void {
@@ -66,6 +66,17 @@ final class PluginHeadersTest extends TestCase {
 		} finally {
 			$this->restore_accept_sec_fetch_server_vars( $backup );
 		}
+	}
+
+	public function test_current_user_agent_unslashes_and_sanitizes_server_value(): void {
+		$_SERVER['HTTP_USER_AGENT'] = 'Mozilla <b>Googlebot</b>';
+
+		$reflection = new \ReflectionMethod( Plugin::class, 'current_user_agent' );
+		$reflection->setAccessible( true );
+
+		$this->assertSame( 'Mozilla Googlebot', $reflection->invoke( null ) );
+
+		unset( $_SERVER['HTTP_USER_AGENT'] );
 	}
 
 	/** @var list<string> */

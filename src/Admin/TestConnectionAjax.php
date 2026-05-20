@@ -2,26 +2,28 @@
 /**
  * admin-ajax handler for probing a connector's facilitator.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Admin;
+namespace X402Pay\Admin;
 
-use SimpleX402\Facilitator\FacilitatorResolver;
+defined( 'ABSPATH' ) || exit;
+
+use X402Pay\Facilitator\FacilitatorResolver;
 
 /**
- * Powers the Settings → Simple x402 "Test connection" button.
+ * Powers the Settings → x402 Pay "Test connection" button.
  *
- * Registered on `wp_ajax_simple_x402_test_connector`. Admin-only,
+ * Registered on `wp_ajax_x402_pay_test_connector`. Admin-only,
  * nonce-checked. Resolves the posted connector_id through FacilitatorResolver
  * and returns the TestResult as JSON.
  */
 final class TestConnectionAjax {
 
-	public const ACTION = 'simple_x402_test_connector';
-	public const NONCE  = 'simple_x402_test_connector_nonce';
+	public const ACTION = 'x402_pay_test_connector';
+	public const NONCE  = 'x402_pay_test_connector_nonce';
 
 	public function __construct( private readonly FacilitatorResolver $resolver ) {}
 
@@ -37,7 +39,7 @@ final class TestConnectionAjax {
 		check_ajax_referer( self::NONCE, 'nonce' );
 
 		$id = isset( $_POST['connector_id'] )
-			? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) wp_unslash( $_POST['connector_id'] ) ) )
+			? sanitize_key( wp_unslash( $_POST['connector_id'] ) )
 			: '';
 		if ( '' === $id ) {
 			wp_send_json_error( array( 'error' => 'missing_connector_id' ), 400 );

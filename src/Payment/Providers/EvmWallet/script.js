@@ -6,33 +6,41 @@
  * announced icon + name. On click, builds the EIP-3009
  * `TransferWithAuthorization` typed data, asks the announced provider to
  * sign it, and hands the signature to the host's `retry()` so the original
- * request is replayed with `Payment-Signature`. Mirrors what
+ * request is replayed with `X-PAYMENT`. Mirrors what
  * `scripts/pay.mjs` does in Node, but uses raw `provider.request` calls
  * instead of viem.
  *
  * Spec: https://eips.ethereum.org/EIPS/eip-6963
  */
 ( function () {
-	if ( ! window.simpleX402 || typeof window.simpleX402.registerProvider !== 'function' ) {
-		console.error( '[sx402] evm-wallet provider loaded before host; skipping.' );
+	if ( ! window.x402Pay || typeof window.x402Pay.registerProvider !== 'function' ) {
+		console.error( '[x402-pay] evm-wallet provider loaded before host; skipping.' );
 		return;
 	}
 
-	// Network → EVM chainId. Kept tight: only what the plugin actually
-	// supports today. Adding a network on the PHP side without adding
-	// it here surfaces as a clear "Unsupported network" error rather
-	// than a silently-wrong signature.
-	var CHAIN_IDS = {
-		'base': 8453,
-		'base-sepolia': 84532,
+	// EVM networks supported by the x402 facilitator profiles. Kept tight:
+	// adding a network on the PHP side without adding it here surfaces as a
+	// clear "Unsupported network" error rather than a silently-wrong signature.
+	var NETWORKS = {
+		'base': {
+			chainId: 8453,
+			chainName: 'Base',
+			rpcUrls: [ 'https://mainnet.base.org' ],
+			nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+			blockExplorerUrls: [ 'https://basescan.org' ],
+		},
+		'base-sepolia': {
+			chainId: 84532,
+			chainName: 'Base Sepolia',
+			rpcUrls: [ 'https://sepolia.base.org' ],
+			nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+			blockExplorerUrls: [ 'https://sepolia.basescan.org' ],
+		},
 	};
 
 	// Popular wallets we surface as install links when they're NOT
 	// announced via EIP-6963. Match key is `rdns` (reverse-DNS, the
-	// stable identifier each wallet emits). Icons are real brand SVGs
-	// bundled under `src/Payment/Providers/EvmWallet/icons/`; their
-	// public URLs ship via `host.config.suggestionIcons[rdns]` so the
-	// JS doesn't need to know plugin install paths.
+	// stable identifier each wallet emits).
 	var SUGGESTED_WALLETS = [
 		{ rdns: 'io.metamask',         name: 'MetaMask',        installUrl: 'https://metamask.io/download/' },
 		{ rdns: 'me.rainbow',          name: 'Rainbow',         installUrl: 'https://rainbow.me/download/' },
@@ -45,6 +53,71 @@
 	// later. 500ms is comfortably above the 99th-percentile init time
 	// for popular extensions and well below "the page feels slow."
 	var SUGGESTION_DELAY_MS = 500;
+
+	function networkConfigFor( network ) {
+		var config = NETWORKS[ network ];
+		if ( ! config ) {
+			throw new Error( 'Unsupported network: ' + network );
+		}
+		return config;
+	}
+
+	function chainIdHex( chainId ) {
+		return '0x' + Number( chainId ).toString( 16 );
+	}
+
+	function walletErrorCode( error ) {
+		if ( ! error ) return null;
+		if ( error.code ) return error.code;
+		if ( error.data && error.data.originalError && error.data.originalError.code ) {
+			return error.data.originalError.code;
+		}
+		return null;
+	}
+
+	async function ensureWalletChain( provider, requirements, setStatus, walletName ) {
+		var config = networkConfigFor( requirements.network );
+		var targetChainId = chainIdHex( config.chainId );
+
+		try {
+			var activeChainId = await provider.request( { method: 'eth_chainId' } );
+			if (
+				typeof activeChainId === 'string' &&
+				activeChainId.toLowerCase() === targetChainId.toLowerCase()
+			) {
+				return;
+			}
+		} catch ( _ ) {}
+
+		setStatus( 'Switch ' + walletName + ' to ' + config.chainName + '…' );
+		try {
+			await provider.request( {
+				method: 'wallet_switchEthereumChain',
+				params: [ { chainId: targetChainId } ],
+			} );
+		} catch ( e ) {
+			if ( 4902 !== walletErrorCode( e ) ) {
+				throw e;
+			}
+			setStatus( 'Add ' + config.chainName + ' to ' + walletName + '…' );
+			await provider.request( {
+				method: 'wallet_addEthereumChain',
+				params: [
+					{
+						chainId: targetChainId,
+						chainName: config.chainName,
+						nativeCurrency: config.nativeCurrency,
+						rpcUrls: config.rpcUrls,
+						blockExplorerUrls: config.blockExplorerUrls,
+					},
+				],
+			} );
+			await provider.request( {
+				method: 'wallet_switchEthereumChain',
+				params: [ { chainId: targetChainId } ],
+			} );
+		}
+	}
 
 	function randomNonce32() {
 		var arr = new Uint8Array( 32 );
@@ -64,10 +137,7 @@
 	 */
 	function buildTypedData( requirements, fromAddress ) {
 		var network = requirements.network;
-		var chainId = CHAIN_IDS[ network ];
-		if ( ! chainId ) {
-			throw new Error( 'Unsupported network: ' + network );
-		}
+		var chainId = networkConfigFor( network ).chainId;
 		var extra      = requirements.extra || {};
 		var domainName = extra.name;
 		var version    = extra.version;
@@ -117,7 +187,24 @@
 		return { typedData: typedData, authorization: authorization };
 	}
 
-	window.simpleX402.registerProvider( 'evm-wallet', function ( host ) {
+	function sanitizeIconSrc( src ) {
+		if ( typeof src !== 'string' ) return '';
+		var value = src.trim();
+		if ( ! value ) return '';
+		if ( /[\u0000-\u001f\u007f<>]/.test( value ) ) return '';
+		try {
+			var parsed = new URL( value, document.baseURI );
+			if ( parsed.protocol === 'https:' || parsed.protocol === 'http:' ) {
+				return parsed.href;
+			}
+		} catch ( _ ) {}
+		if ( /^data:image\/(?:png|gif|jpe?g|webp|svg\+xml);/i.test( value ) ) {
+			return value;
+		}
+		return '';
+	}
+
+	window.x402Pay.registerProvider( 'evm-wallet', function ( host ) {
 		// Wallets keyed by `rdns` (reverse-DNS identifier — stable across
 		// versions, unique per extension). Lets multiple installs of the
 		// same wallet — or wallets that announce twice — collapse to one row.
@@ -132,9 +219,13 @@
 		async function payWith( announce, button ) {
 			var info = announce.info || {};
 			var provider = announce.provider;
+			var walletName = info.name || 'your wallet';
 
-			button.disabled = true;
-			host.setStatus( 'Connecting to ' + ( info.name || 'wallet' ) + '…' );
+			// Re-enable the button optimistically; the buttons block is
+			// hidden while the flow is active, and re-shown on modal dismiss
+			// so a retry with the same wallet finds the row clickable again.
+			button.disabled = false;
+			host.beginFlow( 'Connecting to ' + walletName + '…' );
 
 			try {
 				var accounts = await provider.request( { method: 'eth_requestAccounts' } );
@@ -143,13 +234,30 @@
 					throw new Error( 'no account returned' );
 				}
 
-				host.setStatus( 'Sign the payment in ' + ( info.name || 'your wallet' ) + '…' );
+				await ensureWalletChain(
+					provider,
+					host.requirements,
+					host.setStatus,
+					walletName
+				);
+
+				host.setStatus( 'Sign the payment in ' + walletName + '…' );
 				var built = buildTypedData( host.requirements, from );
 
 				var signature = await provider.request( {
 					method: 'eth_signTypedData_v4',
 					params: [ from, JSON.stringify( built.typedData ) ],
 				} );
+
+				// EIP-1193 says rejection throws, but guard the happy path too:
+				// some wallets resolve with null/empty on cancel. A valid
+				// EIP-712 signature is "0x" + 130 hex chars (r + s + v).
+				if (
+					typeof signature !== 'string' ||
+					! /^0x[0-9a-fA-F]{130}$/.test( signature )
+				) {
+					throw new Error( 'wallet did not return a valid signature' );
+				}
 
 				await host.retry( {
 					scheme: 'exact',
@@ -159,10 +267,18 @@
 					},
 				} );
 			} catch ( e ) {
-				host.setStatus(
-					'Payment cancelled: ' + ( ( e && e.message ) || 'unknown error' )
-				);
-				button.disabled = false;
+				// host.retry surfaces its own modal on settlement failure and
+				// then rethrows. If the modal is already up, leave it alone —
+				// overwriting it with a connect-time message would be wrong.
+				var modal = document.querySelector( '[data-x402-pay-modal]' );
+				if ( modal && ! modal.hidden ) {
+					return;
+				}
+				var code = walletErrorCode( e );
+				var message = ( 4001 === code )
+					? 'You declined the request in ' + walletName + '.'
+					: ( ( e && e.message ) || 'Unknown error' );
+				host.showError( message );
 			}
 		}
 
@@ -174,25 +290,26 @@
 
 			var button = document.createElement( 'button' );
 			button.type = 'button';
-			button.className = 'sx402-pay-button';
+			button.className = 'x402-pay-button';
 			button.setAttribute( 'data-wallet-rdns', key );
 
 			// The wallet's own icon (typically a data URI). Rendering it
-			// inside `.sx402-pay-icon` picks up the existing border-radius
+			// inside `.x402-pay-icon` picks up the existing border-radius
 			// so EIP-6963 wallets line up visually with built-in providers.
 			var iconSpan = document.createElement( 'span' );
-			iconSpan.className = 'sx402-pay-icon';
+			iconSpan.className = 'x402-pay-icon';
 			iconSpan.setAttribute( 'aria-hidden', 'true' );
-			if ( typeof info.icon === 'string' && info.icon ) {
+			var iconSrc = sanitizeIconSrc( info.icon );
+			if ( iconSrc ) {
 				var img = document.createElement( 'img' );
-				img.src = info.icon;
+				img.src = iconSrc;
 				img.alt = '';
 				iconSpan.appendChild( img );
 			}
 			button.appendChild( iconSpan );
 
 			var labelSpan = document.createElement( 'span' );
-			labelSpan.className = 'sx402-pay-label';
+			labelSpan.className = 'x402-pay-label';
 			// Match the "Pay with <provider>" pattern the built-in Gravatar
 			// row uses, so detected wallets and built-in providers read the
 			// same in the list.
@@ -228,29 +345,30 @@
 			// suggest. Empty state is a no-op so detected-wallet users
 			// don't see a vestigial header.
 			var divider = document.createElement( 'div' );
-			divider.className = 'sx402-section-divider';
+			divider.className = 'x402-pay-section-divider';
 			divider.textContent = ( wallets.size > 0 )
 				? 'or get a wallet'
 				: 'don’t have a wallet?';
 			host.container.appendChild( divider );
 
-			var iconUrls = ( host.config && host.config.suggestionIcons ) || {};
-
 			missing.forEach( function ( w ) {
 				var link = document.createElement( 'a' );
-				link.className = 'sx402-pay-button sx402-pay-button--install';
+				link.className = 'x402-pay-button x402-pay-button--install';
 				link.href = w.installUrl;
 				link.target = '_blank';
 				link.rel = 'noopener noreferrer';
 
-				var iconHtml = iconUrls[ w.rdns ]
-					? '<span class="sx402-pay-icon" aria-hidden="true"><img src="'
-						+ iconUrls[ w.rdns ] + '" alt=""></span>'
-					: '';
-				link.innerHTML = ''
-					+ iconHtml
-					+ '<span class="sx402-pay-label">Install ' + w.name + '</span>'
-					+ '<span class="sx402-pay-meta" aria-hidden="true">↗</span>';
+				var label = document.createElement( 'span' );
+				label.className = 'x402-pay-label';
+				label.textContent = 'Install ' + w.name;
+				link.appendChild( label );
+
+				var meta = document.createElement( 'span' );
+				meta.className = 'x402-pay-meta';
+				meta.setAttribute( 'aria-hidden', 'true' );
+				meta.textContent = '↗';
+				link.appendChild( meta );
+
 				host.container.appendChild( link );
 			} );
 		}

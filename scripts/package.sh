@@ -19,19 +19,27 @@ echo "→ composer install --no-dev (for release)"
 composer install --no-dev --optimize-autoloader --no-progress --quiet
 trap 'echo "→ restoring dev composer install"; composer install --no-progress --quiet >/dev/null' EXIT
 
-zipdest="${REPO_ROOT}/dist/simple-x402.zip"
+zipdest="${REPO_ROOT}/dist/x402-pay.zip"
 tmp="$(mktemp -d)"
 
-root="${tmp}/simple-x402"
+root="${tmp}/x402-pay"
 mkdir -p "${root}/assets"
-cp simple-x402.php "${root}/"
+cp x402-pay.php "${root}/"
+cp composer.json "${root}/"
 cp -R src "${root}/"
+find "${root}/src" -type d -empty -delete 2>/dev/null || true
+# Prune dangling symlinks left over from local path-repo dev (e.g. companion
+# plugins) so `cp -RL` doesn't fail trying to follow them, then drop any
+# namespace directory that's now empty as a result.
+find vendor -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+find vendor -mindepth 1 -type d -empty -delete 2>/dev/null || true
 cp -RL vendor "${root}/"
 cp -R assets/build "${root}/assets/"
-[[ -f README.md ]] && cp README.md "${root}/"
-[[ -f LICENSE ]]   && cp LICENSE   "${root}/"
+[[ -f readme.txt ]] && cp readme.txt "${root}/"
+[[ -f README.md ]]  && cp README.md  "${root}/"
+[[ -f LICENSE ]]    && cp LICENSE    "${root}/"
 
 rm -f "${zipdest}"
-( cd "${tmp}" && zip -qr "${zipdest}" simple-x402 -x '*.DS_Store' )
+( cd "${tmp}" && zip -qr "${zipdest}" x402-pay -x '*.DS_Store' )
 rm -rf "${tmp}"
-echo "→ dist/simple-x402.zip"
+echo "→ dist/x402-pay.zip"

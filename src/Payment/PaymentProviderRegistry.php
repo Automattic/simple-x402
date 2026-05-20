@@ -2,22 +2,22 @@
 /**
  * Filter-based registry for front-end payment providers shown on 402 pages.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Payment;
+namespace X402Pay\Payment;
 
 /**
  * Resolves the list of payment-button providers eligible for a given 402
- * response. Providers register via the `simple_x402_payment_providers` filter
+ * response. Providers register via the `x402_pay_payment_providers` filter
  * and return descriptors of shape:
  *
  *   array{
  *     id:          string,                  // Stable slug, used as the slot data attribute.
  *     label:       string,                  // Human-readable name (currently informational).
- *     script_url:  string,                  // Enqueued <script src="…">; runs in the publisher origin.
+ *     script_url:  string,                  // Enqueued provider script; runs in the publisher origin.
  *     is_eligible: bool,                    // False suppresses the slot and its script.
  *     config?:     array<string,mixed>,     // Provider-specific data passed verbatim to the JS callback.
  *   }
@@ -31,7 +31,7 @@ final class PaymentProviderRegistry {
 	 * Filter hook name. Receives `(array $providers, array $context)` and must
 	 * return the (possibly extended) provider list.
 	 */
-	public const FILTER = 'simple_x402_payment_providers';
+	public const FILTER = 'x402_pay_payment_providers';
 
 	/**
 	 * @param array<string,mixed> $context Includes `requirements`, `resource_url`, `request`.

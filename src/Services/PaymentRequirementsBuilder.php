@@ -2,16 +2,16 @@
 /**
  * Builds the x402 PaymentRequirements payload for a single request.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Services;
+namespace X402Pay\Services;
 
 /**
- * Assembles the `PaymentRequirements` array that goes into the
- * PAYMENT-REQUIRED response header and JSON body.
+ * Assembles the `PaymentRequirements` array embedded in the spec-standard
+ * 402 JSON envelope (`{ x402Version, error, accepts: [<PaymentRequirements>] }`).
  *
  * Network, asset, and EIP-712 domain come from the injected FacilitatorProfile,
  * so the builder itself is agnostic to test vs live.
@@ -58,7 +58,7 @@ final class PaymentRequirementsBuilder {
 	 * Convert a decimal string amount into base units (atomic token units).
 	 */
 	private function to_base_units( string $decimal ): string {
-		if ( ! is_numeric( $decimal ) || (float) $decimal <= 0 ) {
+		if ( ! PriceSanitizer::is_fixed_decimal( $decimal ) ) {
 			return '0';
 		}
 		[ $whole, $frac ] = array_pad( explode( '.', $decimal, 2 ), 2, '' );

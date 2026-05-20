@@ -16,7 +16,7 @@ import { DataForm } from '@wordpress/dataviews';
 
 import './style.scss';
 
-const config = window.simpleX402Settings;
+const config = window.x402PaySettings;
 
 const boltIcon = (
 	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
@@ -32,7 +32,7 @@ const spinnerIcon = (
 		height="16"
 		aria-hidden="true"
 		focusable="false"
-		className="simple-x402-spinner-icon"
+		className="x402-pay-spinner-icon"
 	>
 		<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" fill="none" strokeOpacity="0.25" />
 		<path d="M12 3 A9 9 0 0 1 21 12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
@@ -94,7 +94,7 @@ async function runPaywallProbe( probe ) {
 	if ( resp.status !== 402 ) {
 		return sprintf(
 			/* translators: %s: HTTP status code. */
-			__( 'Paywall probe: expected HTTP 402, got status %s.', 'simple-x402' ),
+			__( 'Paywall probe: expected HTTP 402, got status %s.', 'x402-pay' ),
 			String( resp.status )
 		);
 	}
@@ -104,7 +104,7 @@ async function runPaywallProbe( probe ) {
 	if ( ! isJson && ! isHtml ) {
 		return sprintf(
 			/* translators: %s: Content-Type header value or placeholder. */
-			__( 'Paywall probe: expected HTTP 402 with JSON or HTML body, got Content-Type %s.', 'simple-x402' ),
+			__( 'Paywall probe: expected HTTP 402 with JSON or HTML body, got Content-Type %s.', 'x402-pay' ),
 			resp.headers.get( 'content-type' ) || '(missing)'
 		);
 	}
@@ -112,7 +112,7 @@ async function runPaywallProbe( probe ) {
 		try {
 			await resp.json();
 		} catch ( _ ) {
-			return __( 'Paywall probe: response was not valid JSON.', 'simple-x402' );
+			return __( 'Paywall probe: response was not valid JSON.', 'x402-pay' );
 		}
 	}
 	return null;
@@ -189,11 +189,11 @@ function DiagnosticProbeLine( { pending, awaiting, success, durationMs, failureM
 	if ( pending ) {
 		return (
 			<HStack spacing={ 1 } alignment="left" justify="flex-start">
-				<span className="simple-x402-page__inline-spinner" aria-hidden="true">
+				<span className="x402-pay-page__inline-spinner" aria-hidden="true">
 					{ spinnerIcon }
 				</span>
 				<Text size={ 13 } variant="muted">
-					{ __( 'Running check…', 'simple-x402' ) }
+					{ __( 'Running check…', 'x402-pay' ) }
 				</Text>
 			</HStack>
 		);
@@ -201,40 +201,49 @@ function DiagnosticProbeLine( { pending, awaiting, success, durationMs, failureM
 	if ( awaiting ) {
 		return (
 			<HStack spacing={ 1 } alignment="left" justify="flex-start">
-				<span className="simple-x402-page__inline-spinner" aria-hidden="true">
+				<span className="x402-pay-page__inline-spinner" aria-hidden="true">
 					{ clockIcon }
 				</span>
 				<Text size={ 13 } variant="muted">
-					{ __( 'Waiting for the previous step to finish…', 'simple-x402' ) }
+					{ __( 'Waiting for the previous step to finish…', 'x402-pay' ) }
 				</Text>
 			</HStack>
 		);
 	}
 	if ( infoMessage ) {
 		return (
-			<Text size={ 13 } variant="muted">
-				{ infoMessage }
-			</Text>
+			<span className="x402-pay-page__probe-result x402-pay-page__probe-result--info">
+				<span className="x402-pay-page__probe-result__dot" aria-hidden="true" />
+				<Text size={ 13 } variant="muted">
+					{ infoMessage }
+				</Text>
+			</span>
 		);
 	}
 	if ( success ) {
 		return (
-			<Text size={ 13 } variant="muted">
-				{ durationMs != null
-					? sprintf(
-						/* translators: %d: round-trip time in milliseconds. */
-						__( '✓ Succeeded in %dms', 'simple-x402' ),
-						durationMs
-					)
-					: __( '✓ Succeeded', 'simple-x402' ) }
-			</Text>
+			<span className="x402-pay-page__probe-result x402-pay-page__probe-result--ok">
+				<span className="x402-pay-page__probe-result__dot" aria-hidden="true" />
+				<Text size={ 13 } variant="muted">
+					{ durationMs != null
+						? sprintf(
+							/* translators: %d: round-trip time in milliseconds. */
+							__( 'Succeeded in %dms', 'x402-pay' ),
+							durationMs
+						)
+						: __( 'Succeeded', 'x402-pay' ) }
+				</Text>
+			</span>
 		);
 	}
 	if ( failureMessage ) {
 		return (
-			<Text size={ 13 } variant="muted">
-				{ `✗ ${ failureMessage }` }
-			</Text>
+			<span className="x402-pay-page__probe-result x402-pay-page__probe-result--fail">
+				<span className="x402-pay-page__probe-result__dot" aria-hidden="true" />
+				<Text size={ 13 } variant="muted">
+					{ failureMessage }
+				</Text>
+			</span>
 		);
 	}
 	return null;
@@ -242,7 +251,7 @@ function DiagnosticProbeLine( { pending, awaiting, success, durationMs, failureM
 
 function SaveFooter( { disabled, saving, error, onSave } ) {
 	return (
-		<CardFooter className="simple-x402-page__card-footer">
+		<CardFooter className="x402-pay-page__card-footer">
 			<HStack spacing={ 3 } justify="flex-start">
 				<Button
 					variant="primary"
@@ -251,7 +260,7 @@ function SaveFooter( { disabled, saving, error, onSave } ) {
 					disabled={ disabled || saving }
 					accessibleWhenDisabled
 				>
-					{ saving ? __( 'Saving…', 'simple-x402' ) : __( 'Save', 'simple-x402' ) }
+					{ saving ? __( 'Saving…', 'x402-pay' ) : __( 'Save', 'x402-pay' ) }
 				</Button>
 				{ error && (
 					<Text size={ 13 } variant="muted">
@@ -316,14 +325,14 @@ const PAYWALL_MODE_FIELDS = [
 		type: 'text',
 		Edit: 'radio',
 		elements: [
-			{ value: config.modes.paywall.none, label: __( 'No posts (paywall disabled)', 'simple-x402' ) },
-			{ value: config.modes.paywall.allPosts, label: __( 'Every published post', 'simple-x402' ) },
-			{ value: config.modes.paywall.category, label: __( 'Only posts in a specific category', 'simple-x402' ) },
+			{ value: config.modes.paywall.none, label: __( 'No posts (paywall disabled)', 'x402-pay' ) },
+			{ value: config.modes.paywall.allPosts, label: __( 'Every published post', 'x402-pay' ) },
+			{ value: config.modes.paywall.category, label: __( 'Only posts in a specific category', 'x402-pay' ) },
 		],
 	},
 	{
 		id: 'termId',
-		label: __( 'Category', 'simple-x402' ),
+		label: __( 'Category', 'x402-pay' ),
 		type: 'text',
 		Edit: 'select',
 		elements: config.categories.map( ( c ) => ( {
@@ -333,6 +342,39 @@ const PAYWALL_MODE_FIELDS = [
 		isDisabled: ( { item } ) => item.paywallMode !== config.modes.paywall.category,
 	},
 ];
+
+const STATUS_PILL_LABELS = {
+	running: __( 'Checking…', 'x402-pay' ),
+	ok: __( 'Healthy', 'x402-pay' ),
+	attention: __( 'Needs attention', 'x402-pay' ),
+	fail: __( 'Issues found', 'x402-pay' ),
+	idle: __( 'Not yet checked', 'x402-pay' ),
+};
+
+function deriveOverallStatus( runChecksPending, facilitatorCheck, paywallCheck ) {
+	if ( runChecksPending ) {
+		return 'running';
+	}
+	if ( facilitatorCheck == null && paywallCheck == null ) {
+		return 'idle';
+	}
+	if ( facilitatorCheck?.failureMessage || paywallCheck?.failureMessage ) {
+		return 'fail';
+	}
+	if ( facilitatorCheck?.success === true && paywallCheck?.success === true ) {
+		return 'ok';
+	}
+	return 'attention';
+}
+
+function StatusPill( { status } ) {
+	return (
+		<span className={ `x402-pay-status-pill x402-pay-status-pill--${ status }` }>
+			<span className="x402-pay-status-pill__dot" aria-hidden="true" />
+			{ STATUS_PILL_LABELS[ status ] }
+		</span>
+	);
+}
 
 /**
  * @param {object} props
@@ -356,40 +398,49 @@ function RunChecksCard( {
 		facilitatorCheck != null ||
 		paywallCheck != null;
 
+	const overallStatus = deriveOverallStatus(
+		runChecksPending,
+		facilitatorCheck,
+		paywallCheck
+	);
+
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle
-					title={ __( 'Connection & paywall checks', 'simple-x402' ) }
-					subtitle={ __(
-						'Verify facilitator reachability, then probe the live paywall on a matching post.',
-						'simple-x402'
-					) }
-				/>
+				<HStack justify="space-between" alignment="center" spacing={ 3 }>
+					<CardTitle
+						title={ __( 'Status', 'x402-pay' ) }
+						subtitle={ __(
+							'Facilitator reachability and a live probe of the paywall on a matching post.',
+							'x402-pay'
+						) }
+					/>
+					<StatusPill status={ overallStatus } />
+				</HStack>
 			</CardHeader>
 			<CardBody>
 				<VStack spacing={ 3 }>
 					{ facilitatorDirty && (
 						<Text size={ 13 } variant="muted">
 							{ __(
-								'Save your facilitator settings before running checks.',
-								'simple-x402'
+								'Save your facilitator settings to refresh the status.',
+								'x402-pay'
 							) }
 						</Text>
 					) }
 					{ paywallDirty && (
 						<Text size={ 13 } variant="muted">
 							{ __(
-								'Save your paywall scope changes before running checks.',
-								'simple-x402'
+								'Save your paywall scope changes to refresh the status.',
+								'x402-pay'
 							) }
 						</Text>
 					) }
 					{ showSteps && (
 						<VStack spacing={ 3 }>
-							<VStack spacing={ 0 } className="simple-x402-page__run-checks-step">
+							<VStack spacing={ 0 } className="x402-pay-page__run-checks-step">
 								<Text size={ 12 } weight={ 600 }>
-									{ __( '1. Facilitator connectivity', 'simple-x402' ) }
+									{ __( 'Facilitator connectivity', 'x402-pay' ) }
 								</Text>
 								<DiagnosticProbeLine
 									pending={ facilitatorCheck?.pending === true }
@@ -400,9 +451,9 @@ function RunChecksCard( {
 									infoMessage={ facilitatorCheck?.infoMessage }
 								/>
 							</VStack>
-							<VStack spacing={ 0 } className="simple-x402-page__run-checks-step">
+							<VStack spacing={ 0 } className="x402-pay-page__run-checks-step">
 								<Text size={ 12 } weight={ 600 }>
-									{ __( '2. Paywall live probe', 'simple-x402' ) }
+									{ __( 'Paywall live probe', 'x402-pay' ) }
 								</Text>
 								<DiagnosticProbeLine
 									pending={ paywallCheck?.pending === true }
@@ -415,9 +466,9 @@ function RunChecksCard( {
 							</VStack>
 						</VStack>
 					) }
-					<HStack spacing={ 3 } justify="flex-start" className="simple-x402-page__probe-row">
+					<HStack spacing={ 3 } justify="flex-start" className="x402-pay-page__probe-row">
 						<Button
-							variant="primary"
+							variant="secondary"
 							size="compact"
 							type="button"
 							icon={ boltIcon }
@@ -430,8 +481,8 @@ function RunChecksCard( {
 							aria-busy={ runChecksPending }
 						>
 							{ runChecksPending
-								? __( 'Running checks…', 'simple-x402' )
-								: __( 'Run checks', 'simple-x402' ) }
+								? __( 'Re-checking…', 'x402-pay' )
+								: __( 'Re-check', 'x402-pay' ) }
 						</Button>
 					</HStack>
 				</VStack>
@@ -469,8 +520,8 @@ function PaywallScopeCard( {
 		<Card>
 			<CardHeader>
 				<CardTitle
-					title={ __( 'Posts', 'simple-x402' ) }
-					subtitle={ __( 'Which posts should be paywalled?', 'simple-x402' ) }
+					title={ __( 'Posts', 'x402-pay' ) }
+					subtitle={ __( 'Which posts should be paywalled?', 'x402-pay' ) }
 				/>
 			</CardHeader>
 			<CardBody>
@@ -503,8 +554,8 @@ const AUDIENCE_FIELDS = [
 		type: 'text',
 		Edit: 'radio',
 		elements: [
-			{ value: config.modes.audience.everyone, label: __( 'Everyone (humans and bots)', 'simple-x402' ) },
-			{ value: config.modes.audience.bots, label: __( 'Only detected bots and crawlers', 'simple-x402' ) },
+			{ value: config.modes.audience.everyone, label: __( 'Everyone (humans and bots)', 'x402-pay' ) },
+			{ value: config.modes.audience.bots, label: __( 'Only detected bots and crawlers', 'x402-pay' ) },
 		],
 	},
 ];
@@ -524,8 +575,8 @@ function AudienceCard( { saved, save } ) {
 		<Card>
 			<CardHeader>
 				<CardTitle
-					title={ __( 'Audience', 'simple-x402' ) }
-					subtitle={ __( 'Which visitors should see the paywall?', 'simple-x402' ) }
+					title={ __( 'Audience', 'x402-pay' ) }
+					subtitle={ __( 'Which visitors should see the paywall?', 'x402-pay' ) }
 				/>
 			</CardHeader>
 			<CardBody>
@@ -552,7 +603,7 @@ const PRICING_FIELDS = [
 		// would still reject pasted values that don't land on the grid; a
 		// plain text input lets site owners type any decimal and leans on
 		// the server sanitizer to reject non-numeric or non-positive input.
-		label: __( 'Price per request (USDC)', 'simple-x402' ),
+		label: __( 'Price per request (USDC)', 'x402-pay' ),
 		type: 'text',
 		placeholder: '0.01',
 	},
@@ -573,8 +624,8 @@ function PricingCard( { saved, save } ) {
 		<Card>
 			<CardHeader>
 				<CardTitle
-					title={ __( 'Pricing', 'simple-x402' ) }
-					subtitle={ __( 'How much each paywalled request costs, in USDC.', 'simple-x402' ) }
+					title={ __( 'Pricing', 'x402-pay' ) }
+					subtitle={ __( 'How much each paywalled request costs, in USDC.', 'x402-pay' ) }
 				/>
 			</CardHeader>
 			<CardBody>
@@ -599,7 +650,7 @@ function facilitatorOptions() {
 		label: f.name || f.id,
 	} ) );
 	return [
-		{ value: '', label: __( '— Select a facilitator —', 'simple-x402' ) },
+		{ value: '', label: __( '— Select a facilitator —', 'x402-pay' ) },
 		...entries,
 	];
 }
@@ -607,7 +658,7 @@ function facilitatorOptions() {
 const FACILITATOR_FIELDS = [
 	{
 		id: 'facilitator',
-		label: __( 'Facilitator', 'simple-x402' ),
+		label: __( 'Facilitator', 'x402-pay' ),
 		type: 'text',
 		Edit: 'select',
 		elements: facilitatorOptions(),
@@ -668,10 +719,12 @@ function FacilitatorCard( {
 	const [ credentials, setCredentials ] = useState( config.connectorCredentials || {} );
 	const [ pendingSecret, setPendingSecret ] = useState( '' );
 	const [ replaceOpen, setReplaceOpen ] = useState( false );
+	const [ clearSecretRequested, setClearSecretRequested ] = useState( false );
 
 	useEffect( () => {
 		setPendingSecret( '' );
 		setReplaceOpen( false );
+		setClearSecretRequested( false );
 	}, [ facilitator ] );
 
 	const credentialState =
@@ -708,14 +761,14 @@ function FacilitatorCard( {
 	const walletHasInvalidFormat =
 		walletInputVisible && '' !== facilitator && '' !== trimmedWallet && ! WALLET_RE.test( trimmedWallet );
 	const walletError = walletHasInvalidFormat
-		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'simple-x402' )
+		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'x402-pay' )
 		: null;
 	const walletHelp =
 		'' !== facilitator && walletInputVisible
 			? createInterpolateElement(
 					__(
 						'Have a wallet? Paste its public 0x address. New to crypto? Create one with <a>MetaMask</a>.',
-						'simple-x402'
+						'x402-pay'
 					),
 					{
 						a: (
@@ -732,7 +785,8 @@ function FacilitatorCard( {
 	const isDirty =
 		facilitator !== savedId ||
 		( '' !== facilitator && ! isShallowEqual( slot, savedSlot ) ) ||
-		'' !== pendingSecret;
+		'' !== pendingSecret ||
+		clearSecretRequested;
 
 	const onWalletChange = ( edits ) => {
 		setSlots( {
@@ -747,8 +801,8 @@ function FacilitatorCard( {
 			if ( '' !== facilitator ) {
 				partial.facilitators = { [ facilitator ]: slot };
 			}
-			if ( '' !== facilitator && '' !== pendingSecret ) {
-				partial.connector_secrets = { [ facilitator ]: pendingSecret };
+			if ( '' !== facilitator && ( '' !== pendingSecret || clearSecretRequested ) ) {
+				partial.connector_secrets = { [ facilitator ]: clearSecretRequested ? null : pendingSecret };
 			}
 			const { values: merged, ajaxData } = await save( partial );
 			setFacilitator( merged.selected_facilitator_id || '' );
@@ -761,24 +815,25 @@ function FacilitatorCard( {
 			}
 			setPendingSecret( '' );
 			setReplaceOpen( false );
+			setClearSecretRequested( false );
 		} );
 
 	const facilitatorSubtitle =
 		'' !== facilitator && ! walletInputVisible
 			? __(
 					'WordPress.com handles verify and settle. Payments are pooled for your account — no receiving wallet to configure here.',
-					'simple-x402'
+					'x402-pay'
 				)
 			: __(
 					'Where verify and settle requests are sent, and where payments land. The paywall stays inert until a receiving wallet is set.',
-					'simple-x402'
+					'x402-pay'
 				);
 
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle
-					title={ __( 'Facilitator', 'simple-x402' ) }
+					title={ __( 'Facilitator', 'x402-pay' ) }
 					subtitle={ facilitatorSubtitle }
 				/>
 			</CardHeader>
@@ -797,51 +852,12 @@ function FacilitatorCard( {
 				/>
 				{ '' !== facilitator && (
 					<>
-						<div className="simple-x402-page__divider" />
-						{ walletInputVisible ? (
-							<div
-								className={
-									walletError
-										? 'simple-x402-page__wallet simple-x402-page__wallet--error'
-										: 'simple-x402-page__wallet'
-								}
-							>
-								<TextControl
-									__nextHasNoMarginBottom
-									__next40pxDefaultSize
-									label={ __( 'Receiving wallet', 'simple-x402' ) }
-									placeholder={ __( 'Add a valid EVM address 0x...', 'simple-x402' ) }
-									help={
-										walletError ? (
-											<span
-												className="simple-x402-page__field-error"
-												role="alert"
-											>
-												{ walletError }
-											</span>
-										) : (
-											walletHelp
-										)
-									}
-									value={ walletValue }
-									onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
-									aria-invalid={ walletError ? 'true' : 'false' }
-								/>
-							</div>
-						) : (
-							<Text size={ 13 } variant="muted">
-								{ __(
-									'Receiving address is managed by WordPress.com for this facilitator.',
-									'simple-x402'
-								) }
-							</Text>
-						) }
+						<div className="x402-pay-page__divider" />
 						{ apiKeyInputsVisible && (
 							<>
-								<div className="simple-x402-page__divider" />
-								<div className="simple-x402-page__api-keys">
+								<div className="x402-pay-page__api-keys">
 									{ adminMeta && (
-										<div className="simple-x402-page__api-keys-intro">
+										<div className="x402-pay-page__api-keys-intro">
 											{ adminMeta.introHeadline && (
 												<Text size={ 13 }>{ adminMeta.introHeadline }</Text>
 											) }
@@ -867,12 +883,12 @@ function FacilitatorCard( {
 									<TextControl
 										__nextHasNoMarginBottom
 										__next40pxDefaultSize
-										label={ __( 'API key ID', 'simple-x402' ) }
+										label={ __( 'API key ID', 'x402-pay' ) }
 										placeholder={ adminMeta?.keyIdPlaceholder || '' }
 										help={
 											keyIdInvalid && adminMeta?.keyIdInvalidMessage ? (
 												<span
-													className="simple-x402-page__field-error"
+													className="x402-pay-page__field-error"
 													role="alert"
 												>
 													{ adminMeta.keyIdInvalidMessage }
@@ -883,9 +899,9 @@ function FacilitatorCard( {
 										onChange={ ( value ) => onWalletChange( { api_key_id: value } ) }
 										aria-invalid={ keyIdInvalid ? 'true' : 'false' }
 									/>
-									<div className="simple-x402-page__api-key-secret">
-										<div className="components-base-control__label simple-x402-page__api-key-secret-label">
-											{ __( 'API key secret', 'simple-x402' ) }
+									<div className="x402-pay-page__api-key-secret">
+										<div className="components-base-control__label x402-pay-page__api-key-secret-label">
+											{ __( 'API key secret', 'x402-pay' ) }
 										</div>
 										{ ! secretEditable && credentialState.has_secret && (
 											<Text size={ 13 } variant="muted">
@@ -893,11 +909,11 @@ function FacilitatorCard( {
 													'env' === credentialState.source
 														? __(
 																'Set via the <code/> environment variable. Edit it on the server to change.',
-																'simple-x402'
+																'x402-pay'
 															)
 														: __(
 																'Set via the <code/> constant in wp-config.php. Edit it there to change.',
-																'simple-x402'
+																'x402-pay'
 															),
 													{
 														code: <code>{ credentialState.constant_name || '' }</code>,
@@ -911,30 +927,45 @@ function FacilitatorCard( {
 													{ credentialState.saved_at_label
 														? sprintf(
 																/* translators: %s: human-readable save date. */
-																__( 'Key saved on %s.', 'simple-x402' ),
+																__( 'Key saved on %s.', 'x402-pay' ),
 																credentialState.saved_at_label
 															)
-														: __( 'Key saved.', 'simple-x402' ) }
+														: __( 'Key saved.', 'x402-pay' ) }
 												</Text>
 												<Button
 													variant="link"
 													type="button"
-													onClick={ () => setReplaceOpen( true ) }
+													onClick={ () => {
+														setClearSecretRequested( false );
+														setReplaceOpen( true );
+													} }
 												>
-													{ __( 'Replace key', 'simple-x402' ) }
+													{ __( 'Replace key', 'x402-pay' ) }
+												</Button>
+												<Button
+													variant="link"
+													isDestructive
+													type="button"
+													onClick={ () => {
+														setPendingSecret( '' );
+														setReplaceOpen( false );
+														setClearSecretRequested( true );
+													} }
+												>
+													{ __( 'Clear key', 'x402-pay' ) }
 												</Button>
 											</HStack>
 										) }
 										{ secretInputShown && (
 											<TextareaControl
 												__nextHasNoMarginBottom
-												label={ __( 'API key secret', 'simple-x402' ) }
+												label={ __( 'API key secret', 'x402-pay' ) }
 												hideLabelFromVision
 												placeholder={ adminMeta?.keySecretPlaceholder || '' }
 												help={
 													secretInvalid && adminMeta?.keySecretInvalidMessage ? (
 														<span
-															className="simple-x402-page__field-error"
+															className="x402-pay-page__field-error"
 															role="alert"
 														>
 															{ adminMeta.keySecretInvalidMessage }
@@ -943,7 +974,7 @@ function FacilitatorCard( {
 														createInterpolateElement(
 															__(
 																'For production sites, define <code/> in wp-config.php instead — the plugin reads that constant first and the secret never lands in the database.',
-																'simple-x402'
+																'x402-pay'
 															),
 															{
 																code: <code>{ credentialState.constant_name || '' }</code>,
@@ -959,7 +990,46 @@ function FacilitatorCard( {
 										) }
 									</div>
 								</div>
+								<div className="x402-pay-page__divider" />
 							</>
+						) }
+						{ walletInputVisible ? (
+							<div
+								className={
+									walletError
+										? 'x402-pay-page__wallet x402-pay-page__wallet--error'
+										: 'x402-pay-page__wallet'
+								}
+							>
+								<TextControl
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+									label={ __( 'Receiving wallet', 'x402-pay' ) }
+									placeholder={ __( 'Add a valid EVM address 0x...', 'x402-pay' ) }
+									help={
+										walletError ? (
+											<span
+												className="x402-pay-page__field-error"
+												role="alert"
+											>
+												{ walletError }
+											</span>
+										) : (
+											walletHelp
+										)
+									}
+									value={ walletValue }
+									onChange={ ( value ) => onWalletChange( { wallet_address: value } ) }
+									aria-invalid={ walletError ? 'true' : 'false' }
+								/>
+							</div>
+						) : (
+							<Text size={ 13 } variant="muted">
+								{ __(
+									'Receiving address is managed by WordPress.com for this facilitator.',
+									'x402-pay'
+								) }
+							</Text>
 						) }
 					</>
 				) }
@@ -1020,7 +1090,7 @@ function SettingsApp() {
 				setFacilitatorCheck( {
 					infoMessage: __(
 						'Facilitator connectivity skipped: no facilitator selected.',
-						'simple-x402'
+						'x402-pay'
 					),
 				} );
 				return;
@@ -1038,7 +1108,7 @@ function SettingsApp() {
 			} else {
 				setFacilitatorCheck( {
 					failureMessage:
-						probe.error || __( 'Unreachable', 'simple-x402' ),
+						probe.error || __( 'Unreachable', 'x402-pay' ),
 				} );
 			}
 		} catch ( e ) {
@@ -1057,7 +1127,7 @@ function SettingsApp() {
 				return;
 			}
 			setPaywallCheck( {
-				infoMessage: __( 'Paywall mode is off — no live probe run.', 'simple-x402' ),
+				infoMessage: __( 'Paywall mode is off — no live probe run.', 'x402-pay' ),
 			} );
 			return;
 		}
@@ -1068,7 +1138,7 @@ function SettingsApp() {
 			setPaywallCheck( {
 				infoMessage: __(
 					'Paywall probe skipped: no published post matches the current scope.',
-					'simple-x402'
+					'x402-pay'
 				),
 			} );
 			return;
@@ -1084,7 +1154,7 @@ function SettingsApp() {
 			setPaywallCheck( {
 				infoMessage: __(
 					'Paywall probe skipped: choose a facilitator so the paywall can respond.',
-					'simple-x402'
+					'x402-pay'
 				),
 			} );
 			return;
@@ -1101,7 +1171,7 @@ function SettingsApp() {
 			setPaywallCheck( {
 				infoMessage: __(
 					'Paywall probe skipped: add a receiving wallet so the paywall has somewhere to send payments.',
-					'simple-x402'
+					'x402-pay'
 				),
 			} );
 			return;
@@ -1131,7 +1201,7 @@ function SettingsApp() {
 			setPaywallCheck( {
 				failureMessage: sprintf(
 					/* translators: %s: Error detail (e.g. network failure). */
-					__( 'Paywall probe failed: %s', 'simple-x402' ),
+					__( 'Paywall probe failed: %s', 'x402-pay' ),
 					detail
 				),
 			} );
@@ -1208,10 +1278,29 @@ function SettingsApp() {
 		return () => clearTimeout( t );
 	}, [] );
 
+	// Auto-run once on mount so the Status card paints a live result without
+	// waiting for the operator to press a button. Subsequent re-runs are
+	// driven by the Re-check button or by invalidateChecksFromFormEdit.
+	const didAutoRunRef = useRef( false );
+	useEffect( () => {
+		if ( didAutoRunRef.current ) return;
+		didAutoRunRef.current = true;
+		onRunChecks();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
+
 	return (
-		<div className="simple-x402-page__content">
-			<div className="simple-x402-page__notices" ref={ noticesRef } />
+		<div className="x402-pay-page__content">
+			<div className="x402-pay-page__notices" ref={ noticesRef } />
 			<VStack spacing={ 6 }>
+				<RunChecksCard
+					paywallDirty={ paywallDirty }
+					facilitatorDirty={ facilitatorDirty }
+					runChecksPending={ runChecksPending }
+					onRunChecks={ onRunChecks }
+					facilitatorCheck={ facilitatorCheck }
+					paywallCheck={ paywallCheck }
+				/>
 				<PaywallScopeCard
 					saved={ saved }
 					save={ save }
@@ -1232,20 +1321,12 @@ function SettingsApp() {
 					setSlots={ setSlots }
 					onFacilitatorFormChange={ invalidateChecksFromFormEdit }
 				/>
-				<RunChecksCard
-					paywallDirty={ paywallDirty }
-					facilitatorDirty={ facilitatorDirty }
-					runChecksPending={ runChecksPending }
-					onRunChecks={ onRunChecks }
-					facilitatorCheck={ facilitatorCheck }
-					paywallCheck={ paywallCheck }
-				/>
 			</VStack>
 		</div>
 	);
 }
 
-const mount = document.getElementById( 'simple-x402-app' );
+const mount = document.getElementById( 'x402-pay-app' );
 if ( mount ) {
 	createRoot( mount ).render( <SettingsApp /> );
 }

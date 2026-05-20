@@ -1,17 +1,18 @@
 <?php
 /**
- * Serialises and deserialises x402 PAYMENT-* HTTP header payloads.
+ * Serialises and deserialises base64(JSON) x402 HTTP header payloads.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Services;
+namespace X402Pay\Services;
 
 /**
  * Encodes and decodes base64(JSON) header payloads used by the x402 protocol
- * for the PAYMENT-REQUIRED and PAYMENT-SIGNATURE headers.
+ * for the `X-PAYMENT` request header (signed authorization envelope) and the
+ * `X-PAYMENT-RESPONSE` response header (settlement receipt).
  */
 final class X402HeaderCodec {
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke-test client for simple-x402. Pays for a paywalled URL on Base Sepolia.
+// Smoke-test client for x402 Pay. Pays for a paywalled URL on Base Sepolia.
 //
 // Usage: PRIVATE_KEY=0x... node pay.mjs <url>
 //
@@ -31,13 +31,13 @@ if ( first.status !== 402 ) {
 	process.exit( first.ok ? 0 : 1 );
 }
 
-const challenge = first.headers.get( 'payment-required' );
-if ( ! challenge ) {
-	console.error( 'Missing PAYMENT-REQUIRED header on 402 response' );
+const challengeBody = await first.json();
+if ( ! Array.isArray( challengeBody?.accepts ) || challengeBody.accepts.length === 0 ) {
+	console.error( 'Missing accepts[] in 402 response body' );
 	process.exit( 1 );
 }
 
-const requirements = JSON.parse( Buffer.from( challenge, 'base64' ).toString( 'utf8' ) );
+const requirements = challengeBody.accepts[ 0 ];
 console.log( '    requirements:', requirements );
 
 const now = Math.floor( Date.now() / 1000 );
@@ -94,10 +94,10 @@ console.log( '\n    signed authorization:', {
 	validBefore: authorization.validBefore,
 	nonce: authorization.nonce.slice( 0, 18 ) + '…',
 } );
-console.log( '    retry header: Payment-Signature (base64 length ' + header.length + ')' );
+console.log( '    retry header: X-PAYMENT (base64 length ' + header.length + ')' );
 
 const second = await fetch( url, {
-	headers: { 'Payment-Signature': header },
+	headers: { 'X-PAYMENT': header },
 } );
 console.log( `\n[2] RETRY → ${ second.status }` );
 const body = await second.text();

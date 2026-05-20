@@ -1,10 +1,10 @@
-# Simple x402
+# x402 Pay
 
 Minimal WordPress plugin that gates selected posts behind an x402 payment using the public x402.org facilitator on Base Sepolia.
 
 ## Status
 
-MVP. Bots/API clients only — there is no human checkout UI.
+MVP. Bots/API clients and browser wallets are supported through HTTP 402 payment responses.
 
 ## Requirements
 
@@ -43,7 +43,7 @@ The wallet must hold Base Sepolia USDC. No ETH needed — the x402.org facilitat
 ## What it does
 
 - Adds an `x402paywall` category on activation (distinctive so it won't collide with existing editorial categories).
-- Adds a Settings → Simple x402 page with: wallet address, default price, paywall audience, paywall mode, paywall category (picked from existing categories).
+- Adds a Settings → x402 Pay page with: wallet address, default price, paywall audience, paywall mode, paywall category (picked from existing categories).
 - **Mode** decides which posts qualify:
   - **No posts** (default): paywall disabled; pick another option to turn it on.
   - **All posts**: gate every published post of type `post`.
@@ -57,11 +57,11 @@ Renaming the category in settings does not relabel existing posts — reassign t
 
 ## Extending
 
-See the `simple_x402_rule_for_request` filter in `src/Services/RuleResolver.php`.
+See the `x402_pay_rule_for_request` filter in `src/Services/RuleResolver.php`.
 
 ## Facilitator connectors (WP 7.0+)
 
-Simple x402 discovers facilitator backends through the [WordPress 7.0 Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/). A facilitator is any external service that can `verify` and `settle` x402 payments — x402.org, a site's own Coinbase CDP account, etc.
+x402 Pay discovers facilitator backends through the [WordPress 7.0 Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/). A facilitator is any external service that can `verify` and `settle` x402 payments — x402.org, a site's own Coinbase CDP account, etc.
 
 Publishing a facilitator is a two-step contract:
 
@@ -79,19 +79,30 @@ Publishing a facilitator is a two-step contract:
     } );
     ```
 
-2. **Provide the client** through the `simple_x402_facilitator_for_connector` filter (planned — not yet wired). Since core strips unknown fields from the registration payload, x402-specific capabilities (endpoint URL, supported networks, fee-split support) are delivered here, not in the registration array. Returning a `Facilitator` instance for your connector ID is how the plugin learns how to call your backend.
+2. **Provide the client** through the `x402_pay_facilitator_for_connector` filter. Since core strips unknown fields from the registration payload, x402-specific capabilities (endpoint URL, supported networks, fee-split support) are delivered here, not in the registration array. Returning a `Facilitator` instance for your connector ID is how the plugin learns how to call your backend.
 
-### Built-in x402.org connector
+### Built-in connectors
 
-Simple x402 ships with two connectors out of the box: `simple_x402_test`, which routes through the public x402.org facilitator on Base Sepolia for testnet trials, and `coinbase_cdp`, which routes through Coinbase Developer Platform on Base mainnet (requires a CDP Secret API Key). Site owners pick one from the Facilitator dropdown in Settings → Simple x402 and enter a receiving wallet + price.
+x402 Pay ships with two connectors out of the box: `x402_pay_test`, which routes through the public x402.org facilitator on Base Sepolia for testnet trials, and `coinbase_cdp`, which routes through Coinbase Developer Platform on Base mainnet (requires a CDP Secret API Key). Site owners pick one from the Facilitator dropdown in Settings → x402 Pay and enter a receiving wallet + price.
 
-**Managed receiving address:** Extensions may filter `simple_x402_managed_pool_pay_to` so `payTo` bypasses the per-site wallet field. **Settlement reporting:** after a successful settle, the plugin fires `simple_x402_payment_settled` and may POST to a URL from the `simple_x402_ledger_report_url` filter (see `SimpleX402\Services\FacilitatorHooks`). The ledger (or any hook subscriber that persists externally) should de-duplicate on `transaction`; the plugin may deliver the same settlement more than once under retries or concurrency.
+**Managed receiving address:** Extensions may filter `x402_pay_managed_pool_pay_to` so `payTo` bypasses the per-site wallet field. **Settlement reporting:** after a successful settle, the plugin fires `x402_pay_payment_settled` and may POST to a URL from the `x402_pay_ledger_report_url` filter (see `X402Pay\Services\FacilitatorHooks`). The ledger (or any hook subscriber that persists externally) should de-duplicate on `transaction`; the plugin may deliver the same settlement more than once under retries or concurrency.
 
-## Suggested improvements
+## External services
 
-- **Search-engine bots** — Today, detected crawlers get the same JSON 402 as other clients, which may hurt indexing. Consider treating verified search bots differently, e.g. returning `200` with a short excerpt, summary, or `meta description` in the body instead of a bare 402 (policy and implementation TBD).
+The plugin talks to two external facilitator endpoints, and only when a request hits a paywalled URL with a `Payment-Signature` header (or when an admin clicks **Test connection**). Installing the plugin without picking a paywall mode triggers no outbound calls.
+
+- **x402.org (Test network)** — `https://x402.org/facilitator/`. Default for new installs. Sends PaymentRequirements (receiving wallet, amount, asset, network, resource URL) and the paying client's PaymentPayload. Public testnet only — not for production. [Terms](https://lfprojects.org/policies/terms-of-use/) · [Privacy](https://lfprojects.org/policies/privacy-policy/).
+- **Coinbase Developer Platform** — `https://api.cdp.coinbase.com/platform/v2/x402/`. Active only when an admin selects the Coinbase CDP connector. Sends the same payload plus a CDP-signed JWT. [Terms](https://www.coinbase.com/legal/developer-platform/terms-of-service/) · [Privacy](https://www.coinbase.com/legal/privacy).
 
 ## Changelog
+
+### 0.1.2
+
+- Public 402 page assets now use WordPress enqueue APIs for Plugin Directory review compliance.
+
+### 0.1.1
+
+- Paywall page swaps the wallet buttons for a single live status message during a payment, and surfaces wallet rejections / settlement failures in a dismissible modal.
 
 ### 0.1.0
 

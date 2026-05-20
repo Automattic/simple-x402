@@ -2,21 +2,23 @@
 /**
  * admin-ajax handler for per-card settings saves.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Admin;
+namespace X402Pay\Admin;
 
-use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Services\ConnectorCredentialStore;
-use SimpleX402\Settings\SettingsRepository;
+defined( 'ABSPATH' ) || exit;
+
+use X402Pay\Connectors\ConnectorRegistry;
+use X402Pay\Services\ConnectorCredentialStore;
+use X402Pay\Settings\SettingsRepository;
 
 /**
- * Powers the React Settings → Simple x402 per-card "Save changes" buttons.
+ * Powers the React Settings → x402 Pay per-card "Save changes" buttons.
  *
- * Registered on `wp_ajax_simple_x402_save_settings`. Admin-only,
+ * Registered on `wp_ajax_x402_pay_save_settings`. Admin-only,
  * nonce-checked. Accepts a partial `fields` payload and forwards it to
  * SettingsRepository::update(), which merges into the stored option without
  * clobbering unrelated keys. Returns the merged row so the React state can
@@ -24,8 +26,8 @@ use SimpleX402\Settings\SettingsRepository;
  */
 final class SettingsAjax {
 
-	public const ACTION = 'simple_x402_save_settings';
-	public const NONCE  = 'simple_x402_save_settings_nonce';
+	public const ACTION = 'x402_pay_save_settings';
+	public const NONCE  = 'x402_pay_save_settings_nonce';
 
 	/**
 	 * Max raw `fields` JSON length, in bytes. Larger payloads are rejected
@@ -52,9 +54,11 @@ final class SettingsAjax {
 		}
 		check_ajax_referer( self::NONCE, 'nonce' );
 
-		$raw = isset( $_POST['fields'] )
-			? wp_unslash( (string) $_POST['fields'] )
-			: '';
+		// Raw JSON payload — validated structurally by the json_decode + is_array
+		// check below, and each field is sanitized by SettingsRepository::update().
+		// sanitize_text_field would strip the newlines/tabs/`<` that JSON may carry.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$raw = isset( $_POST['fields'] ) ? wp_unslash( (string) $_POST['fields'] ) : '';
 		if ( strlen( $raw ) > self::MAX_FIELDS_BYTES ) {
 			wp_send_json_error( array( 'error' => 'fields_too_large' ), 413 );
 			return;
@@ -84,7 +88,7 @@ final class SettingsAjax {
 		}
 		$accepted_secret_ids = array();
 		foreach ( $secrets as $connector_id => $value ) {
-			if ( ! is_string( $connector_id ) || ! is_string( $value ) ) {
+			if ( ! is_string( $connector_id ) || ( ! is_string( $value ) && null !== $value ) ) {
 				continue;
 			}
 			// Drop connector IDs that aren't currently registered, or that
@@ -94,13 +98,13 @@ final class SettingsAjax {
 			if ( ! $this->is_api_key_connector( $connector_id ) ) {
 				continue;
 			}
-			// Empty string from the UI means "no change" — only an explicit
-			// `null` clears the stored secret. This way the UI can omit the
-			// field on every save without wiping a previously-stored value.
+			// Empty string from the UI means "no change"; explicit `null`
+			// clears the stored secret. This way normal saves can omit the
+			// field without wiping a previously-stored value.
 			if ( '' === $value ) {
 				continue;
 			}
-			$this->credentials->set_secret( $connector_id, $value );
+			$this->credentials->set_secret( $connector_id, is_string( $value ) ? $value : '' );
 			$accepted_secret_ids[] = $connector_id;
 		}
 

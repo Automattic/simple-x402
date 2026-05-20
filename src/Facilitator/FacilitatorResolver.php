@@ -1,15 +1,15 @@
 <?php
 /**
- * Apply the `simple_x402_facilitator_for_connector` filter to get a client.
+ * Apply the `x402_pay_facilitator_for_connector` filter to get a client.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Facilitator;
+namespace X402Pay\Facilitator;
 
-use SimpleX402\Connectors\ConnectorRegistry;
+use X402Pay\Connectors\ConnectorRegistry;
 
 /**
  * One place that knows how to turn a connector ID into a working Facilitator
@@ -18,7 +18,7 @@ use SimpleX402\Connectors\ConnectorRegistry;
  */
 final class FacilitatorResolver {
 
-	public const FILTER = 'simple_x402_facilitator_for_connector';
+	public const FILTER = 'x402_pay_facilitator_for_connector';
 
 	public function __construct( private readonly ConnectorRegistry $connectors ) {}
 

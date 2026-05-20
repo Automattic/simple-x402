@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace SimpleX402\Tests\Unit;
+namespace X402Pay\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SimpleX402\Services\X402HeaderCodec;
+use X402Pay\Services\X402HeaderCodec;
 
 final class X402HeaderCodecTest extends TestCase {
 

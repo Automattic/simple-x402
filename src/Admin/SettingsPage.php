@@ -1,24 +1,26 @@
 <?php
 /**
- * Admin: Settings → Simple x402 page.
+ * Admin: Settings → x402 Pay page.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Admin;
+namespace X402Pay\Admin;
 
-use SimpleX402\Admin\SettingsAjax;
-use SimpleX402\Admin\PaywallProbeAjax;
-use SimpleX402\Admin\TestConnectionAjax;
-use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Services\ConnectorCredentialStore;
-use SimpleX402\Services\FacilitatorHooks;
-use SimpleX402\Settings\SettingsRepository;
+defined( 'ABSPATH' ) || exit;
+
+use X402Pay\Admin\SettingsAjax;
+use X402Pay\Admin\PaywallProbeAjax;
+use X402Pay\Admin\TestConnectionAjax;
+use X402Pay\Connectors\ConnectorRegistry;
+use X402Pay\Services\ConnectorCredentialStore;
+use X402Pay\Services\FacilitatorHooks;
+use X402Pay\Settings\SettingsRepository;
 
 /**
- * Settings → Simple x402 admin page.
+ * Settings → x402 Pay admin page.
  *
  * Renders a mount point + JSON bootstrap; the React app in
  * assets/build/admin/index.js handles the form UI. Form submission still
@@ -27,9 +29,9 @@ use SimpleX402\Settings\SettingsRepository;
  */
 final class SettingsPage {
 
-	public const MENU_SLUG     = 'simple-x402';
-	public const GROUP         = 'simple_x402_settings_group';
-	public const SCRIPT_HANDLE = 'simple-x402-admin';
+	public const MENU_SLUG     = 'x402-pay';
+	public const GROUP         = 'x402_pay_settings_group';
+	public const SCRIPT_HANDLE = 'x402-pay-admin';
 
 	public function __construct(
 		private readonly SettingsRepository $settings,
@@ -53,7 +55,7 @@ final class SettingsPage {
 	public function admin_body_class( string $classes ): string {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( $screen && 'settings_page_' . self::MENU_SLUG === $screen->id ) {
-			$classes .= ' simple-x402-screen';
+			$classes .= ' x402-pay-screen';
 		}
 		return $classes;
 	}
@@ -66,17 +68,17 @@ final class SettingsPage {
 			return;
 		}
 
-		$asset_path = SIMPLE_X402_DIR . 'assets/build/index.asset.php';
+		$asset_path = X402_PAY_DIR . 'assets/build/index.asset.php';
 		$asset      = file_exists( $asset_path )
 			? require $asset_path
 			: array(
 				'dependencies' => array(),
-				'version'      => SIMPLE_X402_VERSION,
+				'version'      => X402_PAY_VERSION,
 			);
 
 		wp_enqueue_script(
 			self::SCRIPT_HANDLE,
-			plugins_url( 'assets/build/index.js', SIMPLE_X402_FILE ),
+			plugins_url( 'assets/build/index.js', X402_PAY_FILE ),
 			$asset['dependencies'],
 			$asset['version'],
 			true
@@ -84,11 +86,11 @@ final class SettingsPage {
 
 		wp_enqueue_style( 'wp-components' );
 
-		$style_path = SIMPLE_X402_DIR . 'assets/build/style-index.css';
+		$style_path = X402_PAY_DIR . 'assets/build/style-index.css';
 		if ( file_exists( $style_path ) ) {
 			wp_enqueue_style(
 				self::SCRIPT_HANDLE,
-				plugins_url( 'assets/build/style-index.css', SIMPLE_X402_FILE ),
+				plugins_url( 'assets/build/style-index.css', X402_PAY_FILE ),
 				array( 'wp-components' ),
 				$asset['version']
 			);
@@ -96,18 +98,18 @@ final class SettingsPage {
 
 		wp_localize_script(
 			self::SCRIPT_HANDLE,
-			'simpleX402Settings',
+			'x402PaySettings',
 			$this->bootstrap_data()
 		);
 	}
 
 	/**
-	 * Add the Settings → Simple x402 menu item.
+	 * Add the Settings → x402 Pay menu item.
 	 */
 	public function add_menu(): void {
 		add_options_page(
-			__( 'Simple x402', 'simple-x402' ),
-			__( 'Simple x402', 'simple-x402' ),
+			__( 'x402 Pay', 'x402-pay' ),
+			__( 'x402 Pay', 'x402-pay' ),
 			'manage_options',
 			self::MENU_SLUG,
 			array( $this, 'render' )
@@ -122,15 +124,21 @@ final class SettingsPage {
 			self::GROUP,
 			SettingsRepository::OPTION_NAME,
 			array(
-				'sanitize_callback' => fn ( $input ): array => $this->settings->sanitize(
-					is_array( $input ) ? $input : array()
-				),
+				'type'              => 'array',
+				'sanitize_callback' => array( $this, 'sanitize_settings' ),
 			)
 		);
 	}
 
 	/**
-	 * Render the settings page shell. The React app paints itself into #simple-x402-app.
+	 * Sanitize the nested options payload submitted by WordPress settings.
+	 */
+	public function sanitize_settings( mixed $input ): array {
+		return $this->settings->sanitize( is_array( $input ) ? $input : array() );
+	}
+
+	/**
+	 * Render the settings page shell. The React app paints itself into #x402-pay-app.
 	 */
 	public function render(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -138,20 +146,20 @@ final class SettingsPage {
 		}
 		?>
 		<div class="wrap">
-			<header class="simple-x402-page__header">
-				<h1 class="simple-x402-page__header-title">
-					<?php esc_html_e( 'Simple x402', 'simple-x402' ); ?>
+			<header class="x402-pay-page__header">
+				<h1 class="x402-pay-page__header-title">
+					<?php esc_html_e( 'x402 Pay', 'x402-pay' ); ?>
 				</h1>
-				<p class="simple-x402-page__header-subtitle">
+				<p class="x402-pay-page__header-subtitle">
 					<?php
 					esc_html_e(
 						'Configure how the x402 paywall protects your content and where payments go.',
-						'simple-x402'
+						'x402-pay'
 					);
 					?>
 				</p>
 			</header>
-			<div id="simple-x402-app"></div>
+			<div id="x402-pay-app"></div>
 		</div>
 		<?php
 	}
@@ -174,26 +182,34 @@ final class SettingsPage {
 		$categories = array_map(
 			static fn ( $term ): array => array(
 				'term_id' => (int) $term->term_id,
-				'name'    => (string) $term->name,
+				'name'    => sanitize_text_field( (string) $term->name ),
 			),
 			$terms
 		);
 
-		$facilitators = array_map(
-			static fn ( string $id, array $c ): array => array(
+		$connectors   = $this->connectors->facilitators();
+		$facilitators = array();
+		foreach ( $connectors as $id => $connector ) {
+			$id = self::sanitize_connector_id( (string) $id );
+			if ( '' === $id || ! is_array( $connector ) ) {
+				continue;
+			}
+			$facilitators[] = array(
 				'id'          => $id,
-				'name'        => (string) ( $c['name'] ?? $id ),
-				'description' => (string) ( $c['description'] ?? '' ),
-			),
-			array_keys( $this->connectors->facilitators() ),
-			array_values( $this->connectors->facilitators() )
-		);
+				'name'        => sanitize_text_field( (string) ( $connector['name'] ?? $id ) ),
+				'description' => sanitize_text_field( (string) ( $connector['description'] ?? '' ) ),
+			);
+		}
 
 		$managed_wallet_facilitators = array();
 		$api_key_facilitators        = array();
 		$connector_credentials       = array();
 		$connector_admin_meta        = array();
-		foreach ( $this->connectors->facilitators() as $fid => $connector ) {
+		foreach ( $connectors as $fid => $connector ) {
+			$fid = self::sanitize_connector_id( (string) $fid );
+			if ( '' === $fid ) {
+				continue;
+			}
 			if ( '' !== (string) apply_filters( FacilitatorHooks::MANAGED_POOL_PAY_TO, '', $fid ) ) {
 				$managed_wallet_facilitators[] = $fid;
 			}
@@ -203,7 +219,7 @@ final class SettingsPage {
 				$connector_credentials[ $fid ] = $this->credentials->status( $fid );
 				$meta                          = apply_filters( FacilitatorHooks::CONNECTOR_ADMIN_META, array(), $fid );
 				if ( is_array( $meta ) && array() !== $meta ) {
-					$connector_admin_meta[ $fid ] = $meta;
+					$connector_admin_meta[ $fid ] = self::sanitize_connector_admin_meta( $meta );
 				}
 			}
 		}
@@ -250,5 +266,58 @@ final class SettingsPage {
 				'default_price'            => $this->settings->default_price(),
 			),
 		);
+	}
+
+	private static function sanitize_connector_id( string $id ): string {
+		return (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( $id ) );
+	}
+
+	/**
+	 * Keep connector-supplied admin UI metadata to plain text and safe URLs
+	 * before it crosses into the React bootstrap payload.
+	 *
+	 * @param array<string,mixed> $meta
+	 * @return array<string,string>
+	 */
+	private static function sanitize_connector_admin_meta( array $meta ): array {
+		$text_keys = array(
+			'introHeadline',
+			'introBody',
+			'docsLinkText',
+			'keyIdPlaceholder',
+			'keyIdPattern',
+			'keyIdInvalidMessage',
+			'keySecretPlaceholder',
+			'keySecretPattern',
+			'keySecretInvalidMessage',
+		);
+		$out       = array();
+		foreach ( $text_keys as $key ) {
+			if ( isset( $meta[ $key ] ) && is_scalar( $meta[ $key ] ) ) {
+				$out[ $key ] = 'introBody' === $key
+					? self::sanitize_interpolated_text( (string) $meta[ $key ] )
+					: sanitize_text_field( (string) $meta[ $key ] );
+			}
+		}
+		if ( isset( $meta['docsUrl'] ) && is_scalar( $meta['docsUrl'] ) ) {
+			$out['docsUrl'] = self::sanitize_http_url( (string) $meta['docsUrl'] );
+		}
+		return $out;
+	}
+
+	private static function sanitize_interpolated_text( string $text ): string {
+		$token = '__X402_PAY_DOCS_PLACEHOLDER__';
+		$text  = str_replace( '<docs/>', $token, $text );
+		$text  = sanitize_text_field( $text );
+		return str_replace( $token, '<docs/>', $text );
+	}
+
+	private static function sanitize_http_url( string $url ): string {
+		$url    = trim( $url );
+		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			return '';
+		}
+		return esc_url_raw( $url );
 	}
 }

@@ -2,35 +2,37 @@
 /**
  * Plugin bootstrap and hook wiring.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402;
+namespace X402Pay;
 
-use SimpleX402\Admin\PaywallIndicator;
-use SimpleX402\Admin\PaywallProbeAjax;
-use SimpleX402\Admin\SettingsAjax;
-use SimpleX402\Admin\SettingsPage;
-use SimpleX402\Admin\TestConnectionAjax;
-use SimpleX402\Connectors\Coinbase\Registrar as CoinbaseRegistrar;
-use SimpleX402\Connectors\ConnectorRegistry;
-use SimpleX402\Connectors\TestConnectorRegistrar;
-use SimpleX402\Facilitator\FacilitatorResolver;
-use SimpleX402\Services\FacilitatorHooks;
-use SimpleX402\Http\PaywallController;
-use SimpleX402\Payment\Providers\EvmWallet\Provider as EvmWalletProvider;
-use SimpleX402\Payment\Providers\GravatarWallet\Provider as GravatarWalletProvider;
-use SimpleX402\Services\AllPostsModeNoticeEmitter;
-use SimpleX402\Services\BotDetector;
-use SimpleX402\Services\CategoryRepository;
-use SimpleX402\Services\DefaultPaywallRule;
-use SimpleX402\Services\GrantStore;
-use SimpleX402\Services\PaywallCategoryGuard;
-use SimpleX402\Services\RuleResolver;
-use SimpleX402\Services\SettingsChangeNotifier;
-use SimpleX402\Settings\SettingsRepository;
+defined( 'ABSPATH' ) || exit;
+
+use X402Pay\Admin\PaywallIndicator;
+use X402Pay\Admin\PaywallProbeAjax;
+use X402Pay\Admin\SettingsAjax;
+use X402Pay\Admin\SettingsPage;
+use X402Pay\Admin\TestConnectionAjax;
+use X402Pay\Connectors\Coinbase\Registrar as CoinbaseRegistrar;
+use X402Pay\Connectors\ConnectorRegistry;
+use X402Pay\Connectors\TestConnectorRegistrar;
+use X402Pay\Facilitator\FacilitatorResolver;
+use X402Pay\Services\FacilitatorHooks;
+use X402Pay\Http\PaywallController;
+use X402Pay\Payment\Providers\EvmWallet\Provider as EvmWalletProvider;
+use X402Pay\Payment\Providers\GravatarWallet\Provider as GravatarWalletProvider;
+use X402Pay\Services\AllPostsModeNoticeEmitter;
+use X402Pay\Services\BotDetector;
+use X402Pay\Services\CategoryRepository;
+use X402Pay\Services\DefaultPaywallRule;
+use X402Pay\Services\GrantStore;
+use X402Pay\Services\PaywallCategoryGuard;
+use X402Pay\Services\RuleResolver;
+use X402Pay\Services\SettingsChangeNotifier;
+use X402Pay\Settings\SettingsRepository;
 
 /**
  * Wires services to WordPress hooks.
@@ -45,7 +47,7 @@ final class Plugin {
 	 * One-shot: if nothing is selected yet, pick the best default connector so
 	 * new installs work without an extra settings save.
 	 */
-	private const FACILITATOR_AUTOPICKED_OPTION = 'simple_x402_facilitator_autopicked';
+	private const FACILITATOR_AUTOPICKED_OPTION = 'x402_pay_facilitator_autopicked';
 
 	/**
 	 * Bootstrap the plugin. Idempotent — safe to call at most once per request.
@@ -91,7 +93,7 @@ final class Plugin {
 		$test_connector = new TestConnectorRegistrar();
 		add_action( 'wp_connectors_init', $test_connector );
 		add_filter(
-			'simple_x402_facilitator_for_connector',
+			'x402_pay_facilitator_for_connector',
 			array( $test_connector, 'provide_facilitator' ),
 			10,
 			2
@@ -100,7 +102,7 @@ final class Plugin {
 		$coinbase_connector = new CoinbaseRegistrar();
 		add_action( 'wp_connectors_init', $coinbase_connector );
 		add_filter(
-			'simple_x402_facilitator_for_connector',
+			'x402_pay_facilitator_for_connector',
 			array( $coinbase_connector, 'provide_facilitator' ),
 			10,
 			2
@@ -131,37 +133,39 @@ final class Plugin {
 		add_action(
 			'template_redirect',
 			static function () use ( $controller ): void {
-				$post_id = is_singular() ? (int) get_queried_object_id() : 0;
-				$path    = (string) ( wp_parse_url(
-					home_url( add_query_arg( array() ) ),
+				$resource_url = home_url( add_query_arg( array() ) );
+				$post_id      = is_singular() ? (int) get_queried_object_id() : 0;
+				$path         = (string) ( wp_parse_url(
+					$resource_url,
 					PHP_URL_PATH
 				) ?? '/' );
-				$method  = isset( $_SERVER['REQUEST_METHOD'] )
+				$method       = isset( $_SERVER['REQUEST_METHOD'] )
 					? sanitize_text_field( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) )
 					: 'GET';
 
 				$controller->handle(
 					array(
-						'path'     => $path,
-						'method'   => $method,
-						'post_id'  => $post_id,
-						'singular' => is_singular(),
-						'headers'  => self::collect_headers(),
+						'path'         => $path,
+						'resource_url' => $resource_url,
+						'method'       => $method,
+						'post_id'      => $post_id,
+						'singular'     => is_singular(),
+						'headers'      => self::collect_headers(),
 					)
 				);
 
 				// Success-path headers (e.g. X-Payment-Grant + Set-Cookie after
 				// a paid request) are flushed even when the controller hands
 				// off to WordPress to render the page normally.
-				foreach ( $GLOBALS['__sx402_response']['success_headers'] ?? array() as $line ) {
+				foreach ( $GLOBALS['x402_pay_response']['success_headers'] ?? array() as $line ) {
 					header( (string) $line, false );
 				}
 
-				if ( ! empty( $GLOBALS['__sx402_response']['exited'] ) ) {
-					foreach ( $GLOBALS['__sx402_response']['headers'] as $name => $value ) {
+				if ( ! empty( $GLOBALS['x402_pay_response']['exited'] ) ) {
+					foreach ( $GLOBALS['x402_pay_response']['headers'] as $name => $value ) {
 						header( $name . ': ' . $value );
 					}
-					echo (string) $GLOBALS['__sx402_response']['body']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON body generated by wp_json_encode.
+					echo (string) $GLOBALS['x402_pay_response']['body']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON body generated by wp_json_encode.
 					exit;
 				}
 			}
@@ -222,7 +226,7 @@ final class Plugin {
 	 */
 	private static function current_user_agent(): string {
 		return isset( $_SERVER['HTTP_USER_AGENT'] )
-			? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] )
+			? sanitize_text_field( (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) )
 			: '';
 	}
 

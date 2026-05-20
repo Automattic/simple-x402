@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace SimpleX402\Tests\Unit;
+namespace X402Pay\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SimpleX402\Services\FacilitatorProfile;
-use SimpleX402\Services\PaymentRequirementsBuilder;
+use X402Pay\Services\FacilitatorProfile;
+use X402Pay\Services\PaymentRequirementsBuilder;
 
 final class PaymentRequirementsBuilderTest extends TestCase {
 

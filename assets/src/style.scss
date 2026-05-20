@@ -1,25 +1,25 @@
 @import '../../node_modules/@wordpress/dataviews/build-style/style.css';
 
-body.simple-x402-screen #wpcontent,
-body.simple-x402-screen #wpbody-content {
+body.x402-pay-screen #wpcontent,
+body.x402-pay-screen #wpbody-content {
 	background: #fff;
 }
 
-body.simple-x402-screen #wpcontent {
+body.x402-pay-screen #wpcontent {
 	padding-left: 0;
 }
 
-body.simple-x402-screen .wrap {
+body.x402-pay-screen .wrap {
 	margin: 0;
 }
 
-.simple-x402-page__header {
+.x402-pay-page__header {
 	padding: 16px 24px;
 	border-bottom: 1px solid #e4e4e4;
 	background: #fff;
 }
 
-.simple-x402-page__header-title {
+.x402-pay-page__header-title {
 	font-size: 20px;
 	font-weight: 500;
 	line-height: 28px;
@@ -29,7 +29,7 @@ body.simple-x402-screen .wrap {
 	white-space: nowrap;
 }
 
-.simple-x402-page__header-subtitle {
+.x402-pay-page__header-subtitle {
 	color: #707070;
 	font-size: 13px;
 	line-height: 24px;
@@ -37,22 +37,22 @@ body.simple-x402-screen .wrap {
 	padding-block-end: 4px;
 }
 
-.simple-x402-page__content {
+.x402-pay-page__content {
 	padding: 24px;
 	max-width: 680px;
 	margin: 0 auto;
 }
 
-.simple-x402-page__notices:not(:empty) {
+.x402-pay-page__notices:not(:empty) {
 	margin-bottom: 16px;
 }
 
-.simple-x402-page__radio-follow-up {
+.x402-pay-page__radio-follow-up {
 	margin-left: 24px;
 	max-width: 320px;
 }
 
-.simple-x402-badge--active {
+.x402-pay-badge--active {
 	display: inline-flex;
 	align-items: center;
 	background: #d7f3e0;
@@ -66,36 +66,36 @@ body.simple-x402-screen .wrap {
 	letter-spacing: 0.04em;
 }
 
-.simple-x402-page__notices .notice,
-.simple-x402-page__notices .updated,
-.simple-x402-page__notices .error {
+.x402-pay-page__notices .notice,
+.x402-pay-page__notices .updated,
+.x402-pay-page__notices .error {
 	margin: 0 0 8px;
 }
 
-body.simple-x402-screen .components-card__header {
+body.x402-pay-screen .components-card__header {
 	border-bottom: none;
 	padding-bottom: 0;
 }
 
-body.simple-x402-screen .simple-x402-page__card-footer {
+body.x402-pay-screen .x402-pay-page__card-footer {
 	border-top: none;
 }
 
 // Test-connection link sits on its own row below the facilitator picker,
 // with enough breathing room that it reads as a deliberate action rather
 // than help text glued to the input.
-.simple-x402-page__probe-row {
+.x402-pay-page__probe-row {
 	margin-top: 16px;
 }
 
 // Thin separator between the facilitator picker + Test-connection line and
 // the wallet/price inputs inside the same card.
-.simple-x402-page__divider {
+.x402-pay-page__divider {
 	border-top: 1px solid #e4e4e4;
 	margin: 16px 0;
 }
 
-.simple-x402-page__wallet--error .components-text-control__input {
+.x402-pay-page__wallet--error .components-text-control__input {
 	border-color: #cc1818;
 	box-shadow: 0 0 0 1px #cc1818;
 }
@@ -103,19 +103,19 @@ body.simple-x402-screen .simple-x402-page__card-footer {
 // Inline error rendered inside a TextControl/TextareaControl `help` slot.
 // Wins over the muted gray default; the surrounding <p.help> still owns the
 // margin so spacing stays consistent with the non-error state.
-.simple-x402-page__field-error {
+.x402-pay-page__field-error {
 	color: #cc1818;
 }
 
 // Vertical spacing between the API key ID input and the secret field/status
 // row inside the facilitator card.
-.simple-x402-page__api-keys {
+.x402-pay-page__api-keys {
 	display: flex;
 	flex-direction: column;
 	gap: 20px;
 }
 
-.simple-x402-page__api-keys-intro {
+.x402-pay-page__api-keys-intro {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -132,34 +132,81 @@ body.simple-x402-screen .simple-x402-page__card-footer {
 // Layout for the secret block — typography on the inner label is delegated
 // to wp-components' .components-base-control__label so it matches the TextControl
 // labels above it without us re-declaring the rule.
-.simple-x402-page__api-key-secret {
+.x402-pay-page__api-key-secret {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 }
 
-.simple-x402-page__api-key-secret-label {
+.x402-pay-page__api-key-secret-label {
 	font-size: 11px;
 	font-weight: 499;
     line-height: 1.4;
     text-transform: uppercase;
 }
 
-.simple-x402-spinner-icon {
-	animation: simple-x402-spin 1s linear infinite;
+.x402-pay-status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1;
+	background: #f0f0f0;
+	color: #50575e;
+	white-space: nowrap;
+
+	&__dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: currentColor;
+		flex-shrink: 0;
+	}
+
+	&--ok { background: #e7f6ea; color: #15672a; }
+	&--fail { background: #fcebec; color: #8a1f24; }
+	&--attention { background: #fcf3e3; color: #8a5a14; }
+	&--running { background: #e6f1ff; color: #15518a; }
+}
+
+// Step result rows inside the Status card. The leading dot mirrors the
+// overall status pill's colour vocabulary so the eye can correlate the
+// per-step state with the headline at a glance.
+.x402-pay-page__probe-result {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+
+	&__dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	&--ok &__dot { background: #15672a; }
+	&--fail &__dot { background: #8a1f24; }
+	&--info &__dot { background: #8c8f94; }
+}
+
+.x402-pay-spinner-icon {
+	animation: x402-pay-spin 1s linear infinite;
 	transform-origin: center;
 }
 
 // Inline spinner used inside DiagnosticProbeLine — the wp-components Text
 // next to it sets line-height ~17px, so vertically centring the SVG keeps
 // the row from looking lopsided.
-.simple-x402-page__inline-spinner {
+.x402-pay-page__inline-spinner {
 	display: inline-flex;
 	align-items: center;
 	color: #757575;
 }
 
-@keyframes simple-x402-spin {
+@keyframes x402-pay-spin {
 	from { transform: rotate(0deg); }
 	to { transform: rotate(360deg); }
 }

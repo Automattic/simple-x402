@@ -2,15 +2,16 @@
 /**
  * Plugin-wide settings accessor backed by the WordPress options API.
  *
- * @package SimpleX402
+ * @package X402Pay
  */
 
 declare(strict_types=1);
 
-namespace SimpleX402\Settings;
+namespace X402Pay\Settings;
 
-use SimpleX402\Http\PaywallController;
-use SimpleX402\Services\FacilitatorHooks;
+use X402Pay\Http\PaywallController;
+use X402Pay\Services\FacilitatorHooks;
+use X402Pay\Services\PriceSanitizer;
 
 /**
  * Thin wrapper around a single wp_options row.
@@ -29,7 +30,7 @@ use SimpleX402\Services\FacilitatorHooks;
  *                               the credential pair, so swapping the picker
  *                               recalls the values last configured for that
  *                               network. The matching secret is handled by
- *                               {@see \SimpleX402\Services\ConnectorCredentialStore}
+ *                               {@see \X402Pay\Services\ConnectorCredentialStore}
  *                               — it never lives in this slot.
  *   - paywall_mode:             'none' | 'category' | 'all-posts'.
  *   - paywall_audience:         'everyone' | 'bots'.
@@ -40,7 +41,7 @@ use SimpleX402\Services\FacilitatorHooks;
  */
 final class SettingsRepository {
 
-	public const OPTION_NAME      = 'simple_x402_settings';
+	public const OPTION_NAME      = 'x402_pay_settings';
 	public const DEFAULT_PRICE    = '0.01';
 	public const DEFAULT_CATEGORY = 'x402paywall';
 
@@ -52,6 +53,7 @@ final class SettingsRepository {
 	 */
 	public const MAX_FACILITATOR_SLOTS = 50;
 	public const MAX_SLOT_FIELD_BYTES  = 200;
+	private const EVM_ADDRESS_PATTERN  = '/^0x[0-9a-fA-F]{40}$/';
 
 	public const PAYWALL_MODE_NONE      = 'none';
 	public const PAYWALL_MODE_CATEGORY  = 'category';
@@ -86,10 +88,14 @@ final class SettingsRepository {
 	public function resolved_pay_to_address(): string {
 		$id      = $this->selected_facilitator_id();
 		$managed = (string) apply_filters( FacilitatorHooks::MANAGED_POOL_PAY_TO, '', $id );
-		if ( '' !== $managed ) {
+		if ( self::is_valid_evm_address( $managed ) ) {
 			return $managed;
 		}
 		return $this->wallet_address();
+	}
+
+	public static function is_valid_evm_address( mixed $raw ): bool {
+		return 1 === preg_match( self::EVM_ADDRESS_PATTERN, trim( (string) $raw ) );
 	}
 
 	/**
@@ -98,7 +104,7 @@ final class SettingsRepository {
 	public function default_price(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
 		$price  = isset( $stored['default_price'] ) ? (string) $stored['default_price'] : '';
-		return '' === $price ? self::DEFAULT_PRICE : $price;
+		return $this->sanitize_price( $price );
 	}
 
 	/**
@@ -119,17 +125,7 @@ final class SettingsRepository {
 	public function facilitator_slots(): array {
 		$stored = get_option( self::OPTION_NAME, array() );
 		$slots  = is_array( $stored['facilitators'] ?? null ) ? $stored['facilitators'] : array();
-		$out    = array();
-		foreach ( $slots as $id => $slot ) {
-			if ( ! is_array( $slot ) ) {
-				continue;
-			}
-			$out[ (string) $id ] = array(
-				'wallet_address' => (string) ( $slot['wallet_address'] ?? '' ),
-				'api_key_id'     => (string) ( $slot['api_key_id'] ?? '' ),
-			);
-		}
-		return $out;
+		return $this->sanitize_facilitators( $slots );
 	}
 
 	public function api_key_id_for( string $facilitator_id ): string {
@@ -143,22 +139,28 @@ final class SettingsRepository {
 	 */
 	public function selected_facilitator_id(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
-		return (string) ( $stored['selected_facilitator_id'] ?? '' );
+		return $this->sanitize_connector_id( $stored['selected_facilitator_id'] ?? '' );
 	}
 
 	public function paywall_mode(): string {
 		$stored = get_option( self::OPTION_NAME, array() );
-		return $stored['paywall_mode'] ?? self::DEFAULT_PAYWALL_MODE;
+		$mode   = isset( $stored['paywall_mode'] ) ? (string) $stored['paywall_mode'] : '';
+		return in_array( $mode, self::VALID_PAYWALL_MODES, true )
+			? $mode
+			: self::DEFAULT_PAYWALL_MODE;
 	}
 
 	public function paywall_audience(): string {
-		$stored = get_option( self::OPTION_NAME, array() );
-		return $stored['paywall_audience'] ?? self::DEFAULT_AUDIENCE;
+		$stored   = get_option( self::OPTION_NAME, array() );
+		$audience = isset( $stored['paywall_audience'] ) ? (string) $stored['paywall_audience'] : '';
+		return in_array( $audience, self::VALID_AUDIENCES, true )
+			? $audience
+			: self::DEFAULT_AUDIENCE;
 	}
 
 	public function paywall_category_term_id(): int {
 		$stored = get_option( self::OPTION_NAME, array() );
-		return $stored['paywall_category_term_id'] ?? 0;
+		return max( 0, (int) ( $stored['paywall_category_term_id'] ?? 0 ) );
 	}
 
 	/**
@@ -215,7 +217,7 @@ final class SettingsRepository {
 	 * clean values in another.
 	 *
 	 * For the nested `facilitators` map, slots are merged by connector ID —
-	 * submitting { simple_x402_test: {...} } leaves coinbase_cdp's slot
+	 * submitting { x402_pay_test: {...} } leaves coinbase_cdp's slot
 	 * untouched.
 	 *
 	 * @param array $partial Raw input (subset of the full shape).
@@ -262,8 +264,9 @@ final class SettingsRepository {
 			$merged['facilitators'] = $existing_slots;
 		}
 
+		$merged = $this->sanitize_stored_row( $merged );
 		update_option( self::OPTION_NAME, $merged );
-		return $this->with_settings_defaults( $merged );
+		return $merged;
 	}
 
 	/**
@@ -284,6 +287,37 @@ final class SettingsRepository {
 				'paywall_category_term_id' => 0,
 			),
 			$merged
+		);
+	}
+
+	/**
+	 * Re-normalise a stored row after partial updates. This keeps historical
+	 * values or direct option writes from leaking unsanitised data through the
+	 * AJAX response while still preserving the partial-update semantics.
+	 *
+	 * @param array<string,mixed> $row
+	 * @return array<string,mixed>
+	 */
+	private function sanitize_stored_row( array $row ): array {
+		$row = $this->with_settings_defaults( $row );
+
+		$mode = isset( $row['paywall_mode'] ) ? (string) $row['paywall_mode'] : '';
+		if ( ! in_array( $mode, self::VALID_PAYWALL_MODES, true ) ) {
+			$mode = self::DEFAULT_PAYWALL_MODE;
+		}
+
+		$audience = isset( $row['paywall_audience'] ) ? (string) $row['paywall_audience'] : '';
+		if ( ! in_array( $audience, self::VALID_AUDIENCES, true ) ) {
+			$audience = self::DEFAULT_AUDIENCE;
+		}
+
+		return array(
+			'default_price'            => $this->sanitize_price( $row['default_price'] ?? '' ),
+			'selected_facilitator_id'  => $this->sanitize_connector_id( $row['selected_facilitator_id'] ?? '' ),
+			'facilitators'             => $this->sanitize_facilitators( $row['facilitators'] ?? array() ),
+			'paywall_mode'             => $mode,
+			'paywall_audience'         => $audience,
+			'paywall_category_term_id' => max( 0, (int) ( $row['paywall_category_term_id'] ?? 0 ) ),
 		);
 	}
 
@@ -314,7 +348,6 @@ final class SettingsRepository {
 			'orderby'                => 'date',
 			'order'                  => 'ASC',
 			'fields'                 => 'ids',
-			'suppress_filters'       => true,
 			'no_found_rows'          => true,
 			'ignore_sticky_posts'    => true,
 			'update_post_meta_cache' => false,
@@ -420,11 +453,16 @@ final class SettingsRepository {
 				continue;
 			}
 			$out[ $clean_id ] = array(
-				'wallet_address' => $this->trim_slot_field( $slot['wallet_address'] ?? '' ),
+				'wallet_address' => $this->sanitize_wallet_address( $slot['wallet_address'] ?? '' ),
 				'api_key_id'     => $this->trim_slot_field( $slot['api_key_id'] ?? '' ),
 			);
 		}
 		return $out;
+	}
+
+	private function sanitize_wallet_address( mixed $raw ): string {
+		$value = trim( (string) $raw );
+		return self::is_valid_evm_address( $value ) ? $value : '';
 	}
 
 	private function trim_slot_field( mixed $raw ): string {
@@ -435,10 +473,6 @@ final class SettingsRepository {
 	}
 
 	private function sanitize_price( mixed $raw ): string {
-		$price = trim( (string) $raw );
-		if ( ! is_numeric( $price ) || (float) $price <= 0 ) {
-			return self::DEFAULT_PRICE;
-		}
-		return $price;
+		return PriceSanitizer::sanitize( $raw, self::DEFAULT_PRICE );
 	}
 }
