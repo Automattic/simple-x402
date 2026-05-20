@@ -115,25 +115,22 @@
 		host.container.appendChild( button );
 
 		button.addEventListener( 'click', async function () {
-			button.disabled = true;
-			host.setStatus( 'Opening Gravatar Wallet…' );
+			// Re-enable the button optimistically; the buttons block is
+			// hidden while the flow is active, and re-shown on modal dismiss
+			// so a retry finds the row clickable again.
+			button.disabled = false;
+			host.beginFlow( 'Opening Gravatar Wallet…' );
 
 			var now = Math.floor( Date.now() / 1000 );
-			var signed;
 			try {
-				signed = await requestSignature( gravatarOrigin, {
+				var signed = await requestSignature( gravatarOrigin, {
 					to: host.requirements.payTo,
 					value: host.requirements.maxAmountRequired,
 					validAfter: now - 1,
 					validBefore: now + 600,
 				} );
-			} catch ( e ) {
-				host.setStatus( 'Payment cancelled: ' + ( ( e && e.message ) || 'unknown error' ) );
-				button.disabled = false;
-				return;
-			}
 
-			try {
+				host.setStatus( 'Settling payment…' );
 				await host.retry( {
 					scheme: 'exact',
 					payload: {
@@ -148,8 +145,15 @@
 						},
 					},
 				} );
-			} catch ( _ ) {
-				button.disabled = false;
+			} catch ( e ) {
+				// host.retry surfaces its own modal on settlement failure and
+				// then rethrows. If the modal is already up, leave it alone —
+				// overwriting it with a popup-time message would be wrong.
+				var modal = document.querySelector( '[data-x402-pay-modal]' );
+				if ( modal && ! modal.hidden ) {
+					return;
+				}
+				host.showError( ( e && e.message ) || 'Payment cancelled.' );
 			}
 		} );
 	} );
