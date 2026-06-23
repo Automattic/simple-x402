@@ -22,20 +22,35 @@ The directory in the plugin zip itself is `assets/` (built JS/CSS). Keep these t
 
 `readme.txt`'s `== Screenshots ==` section is the source of truth for captions and order. The N-th line maps to `screenshot-N.png` in this directory. Keep the two in sync.
 
-## Submitting
+## Releasing
 
 The SVN layout is:
 
 ```
-trunk/                 # plugin code (what npm run package builds)
-tags/0.1.0/            # tagged releases
-assets/                # everything in this directory
+trunk/                 # plugin code
+tags/0.1.x/            # one directory per released version
+assets/                # everything in this directory (listing artwork)
 ```
 
-When publishing, run something like:
+Use the release script to deploy a new version:
 
+```bash
+# Dry run — stages everything, prints the svn ci command, does NOT commit.
+npm run release
+
+# Full release — stages and commits trunk + tag + assets in one go.
+npm run release -- --commit
 ```
-svn cp .wordpress-org/* /path/to/svn-checkout/assets/
-cd /path/to/svn-checkout
-svn ci -m "Update listing artwork"
+
+The script validates that the version strings in `x402-pay.php`, `readme.txt`,
+and `package.json` all agree before touching SVN. It caches the SVN working
+copy at `dist/svn/` (gitignored) and does `svn up` on reuse.
+
+To update listing artwork only (without releasing a new version), commit
+directly from your SVN working copy:
+
+```bash
+cp .wordpress-org/* dist/svn/assets/   # exclude README.md manually
+svn add --force dist/svn/assets
+svn ci dist/svn/assets -m "Update listing artwork"
 ```
