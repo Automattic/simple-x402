@@ -57,3 +57,6 @@ wp-config.php
 /assets/build/
 /scripts/dev-artifacts/
 /dist/
+
+# Local pay-test wallet secrets — never commit
+/scripts/*.wallet.json
