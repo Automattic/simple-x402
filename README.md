@@ -92,7 +92,7 @@ x402 Pay ships with two connectors out of the box: `x402_pay_test`, which routes
 The plugin talks to two external facilitator endpoints, and only when a request hits a paywalled URL with a `Payment-Signature` header (or when an admin clicks **Test connection**). Installing the plugin without picking a paywall mode triggers no outbound calls.
 
 - **x402.org (Test network)** — `https://x402.org/facilitator/`. Default for new installs. Sends PaymentRequirements (receiving wallet, amount, asset, network, resource URL) and the paying client's PaymentPayload. Public testnet only — not for production. [Terms](https://lfprojects.org/policies/terms-of-use/) · [Privacy](https://lfprojects.org/policies/privacy-policy/).
-- **Coinbase Developer Platform** — `https://api.cdp.coinbase.com/platform/v2/x402/`. Active only when an admin selects the Coinbase CDP connector. Sends the same payload plus a CDP-signed JWT. [Terms](https://www.coinbase.com/legal/developer-platform/terms-of-service/) · [Privacy](https://www.coinbase.com/legal/privacy).
+- **Coinbase Developer Platform** — `https://api.cdp.coinbase.com/platform/v2/x402/`. Active only when an admin selects the Coinbase CDP connector. Sends the same payload plus a CDP-signed JWT. [Terms](https://coinbase.com/legal/developer-platform/terms-of-service/) · [Privacy](https://coinbase.com/legal/privacy).
 
 ## Changelog
 

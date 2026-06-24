@@ -4,7 +4,7 @@ Tags: paywall, x402, usdc, micropayments, http-402
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -55,8 +55,8 @@ Used only when an admin selects the **Coinbase CDP** connector and saves an API 
 * Endpoint: `https://api.cdp.coinbase.com/platform/v2/x402/`
 * What is sent: the same x402 PaymentRequirements and PaymentPayload, plus a CDP-signed JWT proving the API key.
 * Why: to verify and settle the USDC payment on Base mainnet.
-* Terms of service: https://www.coinbase.com/legal/developer-platform/terms-of-service/
-* Privacy policy: https://www.coinbase.com/legal/privacy
+* Terms of service: https://coinbase.com/legal/developer-platform/terms-of-service/
+* Privacy policy: https://coinbase.com/legal/privacy
 
 == Installation ==
 
@@ -98,6 +98,9 @@ The admin UI is built from `assets/src/index.jsx` via `npm run build`; the bundl
 3. The paywall page a human reader sees, with pay buttons for popular wallets.
 
 == Changelog ==
+
+= 0.1.3 =
+* Use canonical coinbase.com legal URLs so the terms and privacy links pass Plugin Directory link validation.
 
 = 0.1.2 =
 * Public 402 page assets now use WordPress enqueue APIs for Plugin Directory review compliance.
