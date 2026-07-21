@@ -15,12 +15,48 @@ final class ProviderTest extends TestCase {
 
 	public function test_register_adds_an_eligible_evm_wallet_descriptor(): void {
 		Provider::register();
-		$out = apply_filters( PaymentProviderRegistry::FILTER, array(), array() );
+		$out = apply_filters(
+			PaymentProviderRegistry::FILTER,
+			array(),
+			array( 'requirements' => array( 'network' => 'base' ) )
+		);
 
 		$this->assertCount( 1, $out );
 		$descriptor = $out[0];
 		$this->assertSame( Provider::PROVIDER_ID, $descriptor['id'] );
 		$this->assertTrue( $descriptor['is_eligible'] );
+	}
+
+	public function test_eligible_on_base_sepolia(): void {
+		Provider::register();
+		$out = apply_filters(
+			PaymentProviderRegistry::FILTER,
+			array(),
+			array( 'requirements' => array( 'network' => 'base-sepolia' ) )
+		);
+
+		$this->assertTrue( $out[0]['is_eligible'] );
+	}
+
+	public function test_not_eligible_on_non_evm_network(): void {
+		Provider::register();
+		$out = apply_filters(
+			PaymentProviderRegistry::FILTER,
+			array(),
+			array( 'requirements' => array( 'network' => 'casper:casper' ) )
+		);
+
+		// The provider still registers (so the slot count is predictable)
+		// but must not render a button it cannot service.
+		$this->assertCount( 1, $out );
+		$this->assertFalse( $out[0]['is_eligible'] );
+	}
+
+	public function test_not_eligible_when_context_has_no_network(): void {
+		Provider::register();
+		$out = apply_filters( PaymentProviderRegistry::FILTER, array(), array() );
+
+		$this->assertFalse( $out[0]['is_eligible'] );
 	}
 
 	public function test_descriptor_does_not_bundle_undocumented_brand_assets(): void {

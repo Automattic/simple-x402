@@ -469,4 +469,79 @@ final class SettingsRepositoryTest extends TestCase {
 		);
 		$this->assertSame( '0x9999999999999999999999999999999999999999', $repo->resolved_pay_to_address() );
 	}
+
+	public function test_pay_to_validation_defaults_to_evm_regex(): void {
+		$this->assertTrue( SettingsRepository::is_valid_pay_to_address( '0x1111111111111111111111111111111111111111', 'x402_pay_test' ) );
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( '00' . str_repeat( 'ab', 32 ), 'x402_pay_test' ) );
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( 'nonsense', '' ) );
+	}
+
+	public function test_connector_wallet_pattern_meta_overrides_default(): void {
+		add_filter(
+			FacilitatorHooks::CONNECTOR_ADMIN_META,
+			static fn ( array $meta, string $id ): array => 'casper_cspr_cloud' === $id
+				? array( 'walletPattern' => '^00[0-9a-fA-F]{64}$' )
+				: $meta,
+			10,
+			2
+		);
+
+		$account_hash = '00' . str_repeat( 'ab', 32 );
+		$this->assertTrue( SettingsRepository::is_valid_pay_to_address( $account_hash, 'casper_cspr_cloud' ) );
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( '0x1111111111111111111111111111111111111111', 'casper_cspr_cloud' ) );
+		// Other connectors keep the EVM default.
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( $account_hash, 'x402_pay_test' ) );
+	}
+
+	public function test_unparseable_wallet_pattern_falls_back_to_evm_default(): void {
+		add_filter(
+			FacilitatorHooks::CONNECTOR_ADMIN_META,
+			static fn ( array $meta ): array => array( 'walletPattern' => '([' ),
+			10,
+			2
+		);
+
+		$this->assertTrue( SettingsRepository::is_valid_pay_to_address( '0x1111111111111111111111111111111111111111', 'broken' ) );
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( 'zz', 'broken' ) );
+	}
+
+	public function test_valid_pay_to_filter_can_override_result(): void {
+		add_filter(
+			FacilitatorHooks::VALID_PAY_TO_ADDRESS,
+			static fn ( bool $valid, string $address, string $id ): bool => 'veto_all' === $id ? false : $valid,
+			10,
+			3
+		);
+
+		$this->assertFalse( SettingsRepository::is_valid_pay_to_address( '0x1111111111111111111111111111111111111111', 'veto_all' ) );
+		$this->assertTrue( SettingsRepository::is_valid_pay_to_address( '0x1111111111111111111111111111111111111111', 'other' ) );
+	}
+
+	public function test_slot_wallet_sanitised_with_connector_pattern(): void {
+		add_filter(
+			FacilitatorHooks::CONNECTOR_ADMIN_META,
+			static fn ( array $meta, string $id ): array => 'casper_cspr_cloud' === $id
+				? array( 'walletPattern' => '^00[0-9a-fA-F]{64}$' )
+				: $meta,
+			10,
+			2
+		);
+
+		$account_hash = '00' . str_repeat( 'ab', 32 );
+		$repo         = new SettingsRepository();
+		$repo->save(
+			array(
+				'selected_facilitator_id' => 'casper_cspr_cloud',
+				'facilitators'            => array(
+					'casper_cspr_cloud' => array( 'wallet_address' => $account_hash ),
+					'x402_pay_test'     => array( 'wallet_address' => $account_hash ),
+				),
+			)
+		);
+
+		$slots = $repo->facilitator_slots();
+		$this->assertSame( $account_hash, $slots['casper_cspr_cloud']['wallet_address'] );
+		// EVM-default connector rejects a Casper account hash.
+		$this->assertSame( '', $slots['x402_pay_test']['wallet_address'] );
+	}
 }
