@@ -28,4 +28,13 @@ final class FacilitatorHooks {
 	 * connector-specific text out of the generic admin React app.
 	 */
 	public const CONNECTOR_ADMIN_META = 'x402_pay_connector_admin_meta';
+
+	/**
+	 * Per-connector pay-to address validation. Filter signature:
+	 * `apply_filters( VALID_PAY_TO_ADDRESS, bool $valid, string $address, string $connector_id )`.
+	 * Runs after the built-in check (connector `walletPattern` admin meta,
+	 * falling back to the EVM regex) so connectors for non-EVM chains can
+	 * accept their own address formats — or veto one the pattern allowed.
+	 */
+	public const VALID_PAY_TO_ADDRESS = 'x402_pay_valid_pay_to_address';
 }

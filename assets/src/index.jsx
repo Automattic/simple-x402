@@ -758,10 +758,15 @@ function FacilitatorCard( {
 
 	const walletValue = slot.wallet_address || '';
 	const trimmedWallet = walletValue.trim();
+	// Connector-supplied wallet pattern (same convention as the other
+	// `*Pattern` admin-meta keys); default to the EVM regex so existing
+	// connectors behave exactly as before.
+	const walletRe = compileConnectorPattern( adminMeta?.walletPattern ) || WALLET_RE;
 	const walletHasInvalidFormat =
-		walletInputVisible && '' !== facilitator && '' !== trimmedWallet && ! WALLET_RE.test( trimmedWallet );
+		walletInputVisible && '' !== facilitator && '' !== trimmedWallet && ! walletRe.test( trimmedWallet );
 	const walletError = walletHasInvalidFormat
-		? __( 'Enter a valid address — 0x followed by 40 hex characters.', 'x402-pay' )
+		? adminMeta?.walletInvalidMessage ||
+		  __( 'Enter a valid address — 0x followed by 40 hex characters.', 'x402-pay' )
 		: null;
 	const walletHelp =
 		'' !== facilitator && walletInputVisible
@@ -1005,7 +1010,10 @@ function FacilitatorCard( {
 									__nextHasNoMarginBottom
 									__next40pxDefaultSize
 									label={ __( 'Receiving wallet', 'x402-pay' ) }
-									placeholder={ __( 'Add a valid EVM address 0x...', 'x402-pay' ) }
+									placeholder={
+										adminMeta?.walletPlaceholder ||
+										__( 'Add a valid EVM address 0x...', 'x402-pay' )
+									}
 									help={
 										walletError ? (
 											<span

@@ -28,6 +28,13 @@ final class Provider {
 
 	public const PROVIDER_ID = 'evm-wallet';
 
+	/**
+	 * Networks `script.js` can actually build an EIP-3009 payload for (its
+	 * `NETWORKS` map). On anything else the provider should not render at
+	 * all — connectors for non-EVM chains register their own providers.
+	 */
+	private const SUPPORTED_NETWORKS = array( 'base', 'base-sepolia' );
+
 	public static function register(): void {
 		add_filter(
 			PaymentProviderRegistry::FILTER,
@@ -44,13 +51,15 @@ final class Provider {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function register_provider( array $providers, array $context ): array {
-		unset( $context );
+		$network = isset( $context['requirements']['network'] ) && is_string( $context['requirements']['network'] )
+			? $context['requirements']['network']
+			: '';
 
 		$providers[] = array(
 			'id'          => self::PROVIDER_ID,
 			'label'       => __( 'Pay with a browser wallet', 'x402-pay' ),
 			'script_url'  => plugins_url( 'src/Payment/Providers/EvmWallet/script.js', X402_PAY_FILE ),
-			'is_eligible' => true,
+			'is_eligible' => in_array( $network, self::SUPPORTED_NETWORKS, true ),
 		);
 		return $providers;
 	}
