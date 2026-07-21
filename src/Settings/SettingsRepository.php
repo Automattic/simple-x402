@@ -88,7 +88,7 @@ final class SettingsRepository {
 	public function resolved_pay_to_address(): string {
 		$id      = $this->selected_facilitator_id();
 		$managed = (string) apply_filters( FacilitatorHooks::MANAGED_POOL_PAY_TO, '', $id );
-		if ( self::is_valid_evm_address( $managed ) ) {
+		if ( self::is_valid_pay_to_address( $managed, $id ) ) {
 			return $managed;
 		}
 		return $this->wallet_address();
@@ -96,6 +96,48 @@ final class SettingsRepository {
 
 	public static function is_valid_evm_address( mixed $raw ): bool {
 		return 1 === preg_match( self::EVM_ADDRESS_PATTERN, trim( (string) $raw ) );
+	}
+
+	/**
+	 * Whether $raw is an acceptable pay-to address for the given connector.
+	 *
+	 * The built-in check uses the connector's `walletPattern` admin meta
+	 * (same delimiter-free JS-compatible regex convention as the other
+	 * `*Pattern` meta keys), falling back to the EVM regex when the
+	 * connector doesn't provide one — so behaviour is unchanged for
+	 * existing connectors. The result then runs through the
+	 * {@see FacilitatorHooks::VALID_PAY_TO_ADDRESS} filter so connectors
+	 * for non-EVM chains can implement validation the pattern can't express.
+	 */
+	public static function is_valid_pay_to_address( mixed $raw, string $connector_id ): bool {
+		$value   = trim( (string) $raw );
+		$pattern = self::connector_wallet_pattern( $connector_id );
+		$valid   = null === $pattern
+			? self::is_valid_evm_address( $value )
+			: 1 === preg_match( $pattern, $value );
+		return (bool) apply_filters( FacilitatorHooks::VALID_PAY_TO_ADDRESS, $valid, $value, $connector_id );
+	}
+
+	/**
+	 * Compile the connector's `walletPattern` admin meta into a PCRE, or
+	 * null when the connector doesn't declare one (or it doesn't compile) —
+	 * the caller then falls back to the default EVM check, mirroring the
+	 * admin app's `compileConnectorPattern()` fallback.
+	 */
+	private static function connector_wallet_pattern( string $connector_id ): ?string {
+		if ( '' === $connector_id ) {
+			return null;
+		}
+		$meta    = apply_filters( FacilitatorHooks::CONNECTOR_ADMIN_META, array(), $connector_id );
+		$pattern = is_array( $meta ) && isset( $meta['walletPattern'] ) && is_string( $meta['walletPattern'] )
+			? $meta['walletPattern']
+			: '';
+		if ( '' === $pattern ) {
+			return null;
+		}
+		$compiled = '~' . str_replace( '~', '\~', $pattern ) . '~';
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- probing whether a connector-supplied pattern compiles.
+		return false === @preg_match( $compiled, '' ) ? null : $compiled;
 	}
 
 	/**
@@ -453,16 +495,19 @@ final class SettingsRepository {
 				continue;
 			}
 			$out[ $clean_id ] = array(
-				'wallet_address' => $this->sanitize_wallet_address( $slot['wallet_address'] ?? '' ),
+				'wallet_address' => $this->sanitize_wallet_address( $slot['wallet_address'] ?? '', $clean_id ),
 				'api_key_id'     => $this->trim_slot_field( $slot['api_key_id'] ?? '' ),
 			);
 		}
 		return $out;
 	}
 
-	private function sanitize_wallet_address( mixed $raw ): string {
+	private function sanitize_wallet_address( mixed $raw, string $connector_id ): string {
 		$value = trim( (string) $raw );
-		return self::is_valid_evm_address( $value ) ? $value : '';
+		if ( strlen( $value ) > self::MAX_SLOT_FIELD_BYTES ) {
+			return '';
+		}
+		return self::is_valid_pay_to_address( $value, $connector_id ) ? $value : '';
 	}
 
 	private function trim_slot_field( mixed $raw ): string {
