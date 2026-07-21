@@ -178,7 +178,7 @@ final class PaywallController {
 		}
 
 		$pay_to = $this->settings->resolved_pay_to_address();
-		if ( ! SettingsRepository::is_valid_evm_address( $pay_to ) ) {
+		if ( ! SettingsRepository::is_valid_pay_to_address( $pay_to, $this->settings->selected_facilitator_id() ) ) {
 			// No valid receiving wallet configured — do not ask visitors to sign
 			// a payment that cannot safely settle to the publisher.
 			return;
