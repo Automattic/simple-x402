@@ -23,6 +23,7 @@ use X402Pay\Facilitator\FacilitatorResolver;
 use X402Pay\Services\FacilitatorHooks;
 use X402Pay\Http\PaywallController;
 use X402Pay\Payment\Providers\EvmWallet\Provider as EvmWalletProvider;
+use X402Pay\Payment\Providers\GravatarWallet\Provider as GravatarWalletProvider;
 use X402Pay\Services\AllPostsModeNoticeEmitter;
 use X402Pay\Services\BotDetector;
 use X402Pay\Services\CategoryRepository;
@@ -72,6 +73,7 @@ final class Plugin {
 
 		add_filter( RuleResolver::HOOK, $default_rule, 10, 2 );
 
+		GravatarWalletProvider::register();
 		EvmWalletProvider::register();
 
 		$indicator->register();
